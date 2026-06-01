@@ -1,0 +1,43 @@
+[
+  {"group": "普通聊天", "question": "请用一句话介绍一下你自己", "expected_intent": "chat"},
+  {"group": "普通聊天", "question": "帮我写一句学习 Python 的鼓励语", "expected_intent": "chat"},
+  {"group": "普通聊天", "question": "什么是 FastAPI？", "expected_intent": "chat"},
+  {"group": "普通聊天", "question": "给我三个提升学习效率的方法", "expected_intent": "chat"},
+  {"group": "普通聊天", "question": "请把“大模型应用工程化”解释得通俗一点", "expected_intent": "chat"},
+
+  {"group": "关键词回复", "question": "你好", "expected_intent": "keyword"},
+  {"group": "关键词回复", "question": "帮助", "expected_intent": "keyword"},
+  {"group": "关键词回复", "question": "项目介绍", "expected_intent": "keyword"},
+  {"group": "关键词回复", "question": "联系方式是什么？", "expected_intent": "keyword"},
+  {"group": "关键词回复", "question": "hello", "expected_intent": "keyword"},
+
+  {"group": "时间查询", "question": "/time", "expected_intent": "tool"},
+  {"group": "时间查询", "question": "/time 纽约", "expected_intent": "tool"},
+  {"group": "时间查询", "question": "现在几点", "expected_intent": "tool"},
+  {"group": "时间查询", "question": "当前时间是多少？", "expected_intent": "tool"},
+
+  {"group": "天气查询", "question": "/weather 北京", "expected_intent": "tool"},
+  {"group": "天气查询", "question": "上海天气怎么样？", "expected_intent": "tool"},
+  {"group": "天气查询", "question": "查询广州天气", "expected_intent": "tool"},
+  {"group": "天气查询", "question": "深圳天气", "expected_intent": "tool"},
+
+  {"group": "知识库问答", "question": "根据知识库介绍这个项目的技术栈", "expected_intent": "rag"},
+  {"group": "知识库问答", "question": "文档里说对话流程是怎样的？", "expected_intent": "rag"},
+  {"group": "知识库问答", "question": "根据资料说明 RAG 知识库怎么工作", "expected_intent": "rag"},
+  {"group": "知识库问答", "question": "知识库里提到 SQLite 保存哪些内容？", "expected_intent": "rag"},
+  {"group": "知识库问答", "question": "资料里天气查询没有 API Key 时怎么处理？", "expected_intent": "rag"},
+  {"group": "知识库问答", "question": "根据文档总结这个项目的工程价值", "expected_intent": "rag"},
+  {"group": "知识库问答", "question": "简历项目重点验证什么能力？", "expected_intent": "rag"},
+  {"group": "知识库问答", "question": "知识库支持导入哪些文件？", "expected_intent": "rag"},
+
+  {"group": "上下文追问", "question": "根据知识库介绍这个 Demo", "expected_intent": "rag"},
+  {"group": "上下文追问", "question": "它的技术栈有哪些？", "expected_intent": "rag"},
+  {"group": "上下文追问", "question": "它如何保存聊天记录？", "expected_intent": "rag"},
+  {"group": "上下文追问", "question": "上面提到的工具调用包括什么？", "expected_intent": "rag"},
+  {"group": "上下文追问", "question": "最后帮我总结成一句面试介绍", "expected_intent": "chat"},
+
+  {"group": "异常输入", "question": "   你好   ", "expected_intent": "keyword"},
+  {"group": "异常输入", "question": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "expected_intent": "chat"},
+  {"group": "异常输入", "question": "/weather", "expected_intent": "tool"},
+  {"group": "异常输入", "question": "根据知识库回答一个不存在的问题：量子咖啡机价格", "expected_intent": "rag"}
+]
