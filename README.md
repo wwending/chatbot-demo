@@ -1,29 +1,35 @@
-# 个人知识问答与通用文本聊天机器人 Demo
+# 个人知识问答与通用聊天机器人 Demo
 
-这是一个面向个人知识问答和通用文本聊天场景的大模型应用原型。项目重点验证大模型在垂直知识问答、工具调用、历史上下文和对话流程管理中的工程落地能力。
+这是一个面向个人知识问答和通用文本聊天场景的大模型应用原型。项目包含 FastAPI 后端和 React 前端页面，用于验证大模型在垂直知识问答、工具调用、历史上下文和对话流程管理中的工程落地能力。
 
-项目默认不需要 API Key 也能运行：没有配置大模型密钥时会使用离线兜底回答，方便演示 API、SQLite、关键词、工具和 RAG 流程。配置 DeepSeek、通义千问或其他 OpenAI-compatible API 后，会自动调用真实模型生成回答。
+项目默认不需要 API Key 也能运行：没有配置大模型密钥时会使用 `offline-demo` 兜底回答，方便演示 API、SQLite、关键词、工具调用和 RAG 流程。配置 DeepSeek、通义千问或其他 OpenAI-compatible API 后，会自动调用真实模型生成回答。
 
-## 功能特性
+## 当前实现范围
 
-- 文本聊天：支持普通聊天和历史上下文拼接。
-- 关键词回复：命中“你好”“帮助”“项目介绍”“联系方式”等关键词时直接返回固定回复。
-- 指令识别：支持 `/time`、`现在几点`、`/weather 北京`、`上海天气` 等工具调用。
-- 本地知识库问答：支持导入 `.txt`、`.md`，完成文本清洗、分段、向量化、相似度检索和来源注入。
-- SQLite 持久化：保存会话、消息、关键词命中、知识库来源和模型回答。
-- 可测试可复现：包含 pytest 用例和 30+ 条评估问题。
-- 接口文档：FastAPI 自动生成 Swagger UI。
+已实现：
+
+- FastAPI 后端接口和 Swagger 文档。
+- React + Vite + TypeScript 前端工作台。
+- 普通文本聊天和历史上下文恢复。
+- 关键词回复，例如“你好”“帮助”“项目介绍”“联系方式”。
+- `/time`、`/weather` 等工具调用。
+- 本地知识库导入、上传、文本清洗、分段、向量化、相似度检索和来源展示。
+- SQLite 保存会话、消息、关键词命中、知识库来源和模型回答。
+- 30+ 条评估问题和 pytest 测试。
+
+未实现：
+
+- 登录鉴权。
+- 流式输出。
+- 生产级权限、限流和部署配置。
 
 ## 技术栈
 
-- Python
-- FastAPI
-- SQLite
-- OpenAI-compatible LLM API，支持 DeepSeek/通义千问等
-- RAG
-- 本地轻量向量检索，可替换为 Chroma/FAISS
-- Prompt Engineering
-- pytest
+- Backend：Python、FastAPI、SQLite、httpx、Pydantic
+- Frontend：React、TypeScript、Vite、lucide-react
+- LLM：OpenAI-compatible API，支持 DeepSeek、通义千问等
+- RAG：本地轻量向量检索，可替换为 Chroma 或 FAISS
+- Testing：pytest、脚本化评估
 
 ## 架构流程
 
@@ -33,10 +39,11 @@
  -> 意图识别
  -> keyword / tool / rag / chat 路由
  -> 组装 Prompt + 历史上下文 + 工具结果或检索片段
- -> 调用大模型 API 或离线兜底
+ -> 调用大模型 API 或 offline-demo
  -> 输出后处理
  -> 保存 assistant message、来源、命中信息、模型输出
  -> 返回 JSON
+ -> React 前端展示消息、意图、工具结果、RAG 来源和耗时
 ```
 
 ## 项目结构
@@ -47,25 +54,14 @@ chatbot-demo/
 │   ├── main.py
 │   ├── config.py
 │   ├── schemas.py
-│   ├── router.py
 │   ├── services/
-│   │   ├── chat_service.py
-│   │   ├── intent_service.py
-│   │   ├── keyword_service.py
-│   │   ├── llm_service.py
-│   │   ├── tool_service.py
-│   │   └── history_service.py
 │   ├── rag/
-│   │   ├── loader.py
-│   │   ├── cleaner.py
-│   │   ├── splitter.py
-│   │   ├── embeddings.py
-│   │   ├── vector_store.py
-│   │   ├── ingest.py
-│   │   └── qa_service.py
 │   └── db/
-│       ├── database.py
-│       └── init_db.py
+├── frontend/
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.ts
+│   └── src/
 ├── knowledge/
 ├── data/
 ├── tests/
@@ -77,48 +73,114 @@ chatbot-demo/
 
 ## 快速开始
 
-创建虚拟环境并安装依赖：
+以下命令假设你已经进入项目父目录。项目可以放在任意位置，不依赖 `C:\Users\ww\chatbot-demo` 这种固定路径。
 
-```bash
-cd C:\Users\ww\chatbot-demo
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
+### 1. 进入项目目录
+
+```powershell
+cd chatbot-demo
 ```
 
-复制环境变量模板：
+如果你把项目放在其他目录：
 
-```bash
+```powershell
+cd <你的项目目录>\chatbot-demo
+```
+
+### 2. 安装后端依赖
+
+Windows PowerShell：
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\activate
+python -m pip install -r requirements.txt
 copy .env.example .env
 ```
 
-初始化 SQLite：
+macOS / Linux：
 
 ```bash
-python -m app.db.init_db
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+cp .env.example .env
 ```
 
-导入默认知识库：
+### 3. 初始化后端数据
 
-```bash
+```powershell
+python -m app.db.init_db
 python -m app.rag.ingest
 ```
 
-启动 API：
+### 4. 启动后端
 
-```bash
-uvicorn app.main:app --reload
+推荐使用 `python -m uvicorn`，避免 Windows 环境里 `uvicorn.exe` 不在 PATH 的问题。
+
+```powershell
+python -m uvicorn app.main:app --reload
 ```
 
-打开 Swagger：
+后端地址：
+
+```text
+http://127.0.0.1:8000
+```
+
+Swagger：
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
+### 5. 启动前端
+
+另开一个终端：
+
+```powershell
+cd chatbot-demo\frontend
+npm install
+copy .env.example .env
+npm run dev
+```
+
+macOS / Linux：
+
+```bash
+cd chatbot-demo/frontend
+npm install
+cp .env.example .env
+npm run dev
+```
+
+前端地址：
+
+```text
+http://127.0.0.1:5173
+```
+
+## 前端功能
+
+React 页面采用三栏工作台布局：
+
+- 左侧：用户 ID、会话列表、新建会话、刷新会话。
+- 中间：聊天消息流、示例问题、输入框。
+- 右侧：系统状态、最近一次意图、模型名、耗时、工具结果、RAG 来源、知识库导入和上传。
+
+可演示问题：
+
+```text
+你好
+/time 北京
+/weather 上海
+根据知识库介绍一下这个项目的技术栈
+文档里说对话流程是怎样的？
+```
+
 ## 大模型配置
 
-`.env` 默认配置为 DeepSeek OpenAI-compatible 接口：
+`.env` 默认按 DeepSeek OpenAI-compatible 接口设计：
 
 ```env
 LLM_PROVIDER=deepseek
@@ -127,7 +189,7 @@ LLM_API_KEY=你的 DeepSeek Key
 LLM_MODEL=deepseek-chat
 ```
 
-通义千问可改成类似：
+通义千问示例：
 
 ```env
 LLM_PROVIDER=qwen
@@ -136,30 +198,23 @@ LLM_API_KEY=你的通义千问 Key
 LLM_MODEL=qwen-plus
 ```
 
-没有 `LLM_API_KEY` 时，系统会使用 `offline-demo` 响应，但路由、数据库、RAG 检索、工具调用仍然可演示。
+没有 `LLM_API_KEY` 时，系统会使用 `offline-demo`，但路由、数据库、RAG 检索、工具调用和前端展示都可以正常演示。
+
+前端 API 地址在 `frontend/.env` 中配置：
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
 
 ## API 说明
 
-### 健康检查
+健康检查：
 
 ```bash
 curl http://127.0.0.1:8000/health
 ```
 
-返回示例：
-
-```json
-{
-  "api": "ok",
-  "sqlite": true,
-  "vector_store": true,
-  "llm_configured": false,
-  "llm_provider": "deepseek",
-  "llm_model": "offline-demo"
-}
-```
-
-### 聊天
+聊天：
 
 ```bash
 curl -X POST http://127.0.0.1:8000/chat \
@@ -167,19 +222,7 @@ curl -X POST http://127.0.0.1:8000/chat \
   -d "{\"user_id\":\"demo\",\"message\":\"根据知识库介绍一下这个项目的技术栈\"}"
 ```
 
-返回字段：
-
-- `session_id`：会话 ID，可用于连续追问。
-- `intent`：`keyword`、`tool`、`rag` 或 `chat`。
-- `answer`：助手回答。
-- `sources`：RAG 命中的知识片段来源。
-- `tool_result`：工具调用结果。
-- `model`：真实模型名或 `offline-demo`。
-- `latency_ms`：接口耗时。
-
-### 导入知识库
-
-导入默认 `knowledge/` 目录：
+导入默认知识库：
 
 ```bash
 curl -X POST http://127.0.0.1:8000/knowledge/import \
@@ -187,106 +230,105 @@ curl -X POST http://127.0.0.1:8000/knowledge/import \
   -d "{}"
 ```
 
-导入指定文件或目录：
-
-```bash
-curl -X POST http://127.0.0.1:8000/knowledge/import \
-  -H "Content-Type: application/json" \
-  -d "{\"path\":\"knowledge/project_overview.md\"}"
-```
-
-### 会话列表
-
-```bash
-curl http://127.0.0.1:8000/sessions
-```
-
-按用户筛选：
+会话列表：
 
 ```bash
 curl "http://127.0.0.1:8000/sessions?user_id=demo"
 ```
 
-### 会话消息
+会话消息：
 
 ```bash
 curl http://127.0.0.1:8000/sessions/{session_id}/messages
 ```
 
-## 演示问题
-
-关键词回复：
-
-```text
-你好
-帮助
-项目介绍
-联系方式是什么？
-```
-
-工具调用：
-
-```text
-/time
-/time 纽约
-现在几点
-/weather 北京
-上海天气怎么样？
-```
-
-知识库问答：
-
-```text
-根据知识库介绍这个项目的技术栈
-文档里说对话流程是怎样的？
-资料里天气查询没有 API Key 时怎么处理？
-根据文档总结这个项目的工程价值
-```
-
-上下文追问：
-
-```text
-根据知识库介绍这个 Demo
-它的技术栈有哪些？
-它如何保存聊天记录？
-上面提到的工具调用包括什么？
-```
-
 ## 测试与评估
 
-运行单元测试：
+后端单元测试：
 
-```bash
-pytest
+```powershell
+python -m pytest
 ```
 
-运行 30+ 条 Demo 评估问题：
+30+ 条评估问题：
 
-```bash
-python evals/run_demo_eval.py
+```powershell
+python evals\run_demo_eval.py
 ```
 
-评估问题位于：
+前端构建：
+
+```powershell
+cd frontend
+npm run build
+```
+
+当前验证结果：
 
 ```text
-evals/questions.json
+python -m pytest
+12 passed
+
+python evals\run_demo_eval.py
+35/35 passed
 ```
 
-评估结果输出到：
+## 项目迁移
+
+### 上传 GitHub
+
+```powershell
+git init
+git add .
+git commit -m "Initial chatbot demo"
+git remote add origin https://github.com/<your-name>/chatbot-demo.git
+git branch -M main
+git push -u origin main
+```
+
+### 新电脑运行
+
+```powershell
+git clone https://github.com/<your-name>/chatbot-demo.git
+cd chatbot-demo
+python -m venv .venv
+.\.venv\Scripts\activate
+python -m pip install -r requirements.txt
+copy .env.example .env
+python -m app.db.init_db
+python -m app.rag.ingest
+python -m uvicorn app.main:app --reload
+```
+
+另开一个终端：
+
+```powershell
+cd chatbot-demo\frontend
+npm install
+copy .env.example .env
+npm run dev
+```
+
+### 是否迁移运行数据
+
+默认不迁移运行产物：
 
 ```text
+data/chatbot.db
+data/vector_store.json
 data/eval_result.json
+frontend/node_modules/
+frontend/dist/
 ```
 
-每条评估记录包含：
+如果你需要保留聊天记录和知识库索引，可以手动复制：
 
-- 问题
-- 期望路由
-- 实际路由
-- 是否命中来源
-- 是否成功回答
-- 响应耗时
-- 可优化点
+```text
+data/chatbot.db
+data/vector_store.json
+```
+
+不要上传 `.env`，API Key 应该在新环境手动配置。
 
 ## SQLite 表设计
 
@@ -298,7 +340,7 @@ data/eval_result.json
 - `knowledge_sources`：知识库来源和 chunk 内容。
 - `model_outputs`：模型原始输出、最终回答和耗时。
 
-数据库默认路径：
+默认数据库路径：
 
 ```text
 data/chatbot.db
@@ -317,14 +359,8 @@ data/chatbot.db
 
 如果需要接入 Chroma 或 FAISS，可以替换 `app/rag/vector_store.py` 中的 `LocalVectorStore`，上层 `qa_service.py` 和 `/knowledge/import` 接口无需大改。
 
-## 天气工具说明
-
-没有配置 `WEATHER_API_KEY` 时：
+## 简历描述建议
 
 ```text
-北京天气 Demo：多云，22-28 摄氏度，微风。
+开发前后端分离的个人知识问答与通用聊天机器人 Demo，后端基于 FastAPI 实现对话编排、SQLite 会话持久化、关键词回复、工具调用和本地知识库 RAG 问答；前端基于 React + TypeScript 实现多会话聊天、系统状态、Agent 路由过程、RAG 来源和工具结果可视化。封装 OpenAI-compatible 大模型调用、Prompt 模板、历史上下文拼接、异常重试和离线兜底逻辑，并设计 30+ 条测试问题验证路由准确性、响应稳定性和可优化点。
 ```
-
-配置后，`tool_service.py` 会尝试调用 OpenWeatherMap。也可以替换为高德、和风天气或其他天气 API。
-
-

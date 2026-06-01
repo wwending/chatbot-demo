@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.db.database import db_ready, init_db, list_messages, list_sessions
@@ -17,6 +18,14 @@ from app.schemas import (
 from app.services.chat_service import handle_chat
 
 app = FastAPI(title="Personal Knowledge Chatbot Demo", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")

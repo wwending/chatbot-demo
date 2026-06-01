@@ -7,3 +7,6 @@ data/*.db
 data/*.json
 data/*.log
 data/uvicorn*.txt
+frontend/node_modules/
+frontend/dist/
+frontend/.env
