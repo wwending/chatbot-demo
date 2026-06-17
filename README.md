@@ -12,7 +12,7 @@
 - React + Vite + TypeScript 前端工作台。
 - 普通文本聊天和历史上下文恢复。
 - 关键词回复，例如“你好”“帮助”“项目介绍”“联系方式”。
-- `/time`、`/weather` 等工具调用。
+- `/time`、`/weather`、当前天气和未来天气等工具调用。
 - 本地知识库导入、上传、文本清洗、分段、向量化、相似度检索和来源展示。
 - SQLite 保存会话、消息、关键词命中、知识库来源和模型回答。
 - 30+ 条评估问题和 pytest 测试。
@@ -174,6 +174,8 @@ React 页面采用三栏工作台布局：
 你好
 /time 北京
 /weather 上海
+上海天气怎么样
+New York weather
 根据知识库介绍一下这个项目的技术栈
 文档里说对话流程是怎样的？
 ```
@@ -199,6 +201,31 @@ LLM_MODEL=qwen-plus
 ```
 
 没有 `LLM_API_KEY` 时，系统会使用 `offline-demo`，但路由、数据库、RAG 检索、工具调用和前端展示都可以正常演示。
+
+## 天气工具
+
+天气查询使用 Open-Meteo，不需要 API Key，也不再需要 `WEATHER_API_KEY`。系统会先调用 Open-Meteo Geocoding API 将城市名解析为经纬度，再调用 Forecast API 查询当前天气或 daily forecast。未来天气最多支持 16 天。
+
+支持示例：
+
+```text
+/weather 上海
+上海天气怎么样
+查询武汉天气
+明天临沂天气
+后天武汉天气
+武汉未来一周天气
+未来十五天武汉天气
+武汉未来15天天气
+未来7天北京天气
+查询未来一周上海天气
+帮我看看东京天气
+查一下乌鲁木齐天气
+New York weather
+London weather
+```
+
+`未来30天武汉天气` 这类超出范围的查询不会请求 30 天数据，会提示当前最多支持未来 16 天天气预报。打包后的 `dist/chatbot-demo.exe` 不需要在 `dist/.env` 配置天气 Key；`.env` 仍然用于 `LLM_API_KEY` 等模型配置。
 
 前端 API 地址在 `frontend/.env` 中配置：
 
@@ -267,7 +294,7 @@ npm run build
 
 ```text
 python -m pytest
-12 passed
+38 passed
 
 python evals\run_demo_eval.py
 35/35 passed

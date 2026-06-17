@@ -50,7 +50,6 @@ class ChatbotDesktopApp(tk.Tk):
         self.status = tk.StringVar(value="就绪")
         self.session_count = tk.StringVar(value="0 个会话")
         self.llm_api_key = tk.StringVar(value=self.settings.llm_api_key)
-        self.weather_api_key = tk.StringVar(value=self.settings.weather_api_key)
         self.show_api_keys = tk.BooleanVar(value=False)
         self.chat_has_content = False
 
@@ -272,20 +271,17 @@ class ChatbotDesktopApp(tk.Tk):
         ttk.Label(config, text="LLM API Key", style="StatusName.TLabel").grid(row=1, column=0, sticky="w", pady=(10, 3))
         self.llm_key_entry = ttk.Entry(config, textvariable=self.llm_api_key, show="*")
         self.llm_key_entry.grid(row=2, column=0, sticky="ew")
-        ttk.Label(config, text="OpenWeather API Key", style="StatusName.TLabel").grid(row=3, column=0, sticky="w", pady=(9, 3))
-        self.weather_key_entry = ttk.Entry(config, textvariable=self.weather_api_key, show="*")
-        self.weather_key_entry.grid(row=4, column=0, sticky="ew")
         ttk.Checkbutton(
             config,
             text="显示密钥",
             variable=self.show_api_keys,
             command=self.toggle_api_key_visibility,
-        ).grid(row=5, column=0, sticky="w", pady=(8, 0))
+        ).grid(row=3, column=0, sticky="w", pady=(8, 0))
         ttk.Button(config, text="保存配置", style="Accent.TButton", command=self.save_api_config).grid(
-            row=6, column=0, sticky="ew", pady=(10, 6)
+            row=4, column=0, sticky="ew", pady=(10, 6)
         )
         ttk.Button(config, text="重新加载配置", style="Tool.TButton", command=self.reload_api_config).grid(
-            row=7, column=0, sticky="ew"
+            row=5, column=0, sticky="ew"
         )
 
     def refresh_status(self) -> None:
@@ -438,14 +434,12 @@ class ChatbotDesktopApp(tk.Tk):
     def toggle_api_key_visibility(self) -> None:
         mask = "" if self.show_api_keys.get() else "*"
         self.llm_key_entry.configure(show=mask)
-        self.weather_key_entry.configure(show=mask)
 
     def save_api_config(self) -> None:
         try:
             self._write_env_values(
                 {
                     "LLM_API_KEY": self.llm_api_key.get().strip(),
-                    "WEATHER_API_KEY": self.weather_api_key.get().strip(),
                 }
             )
             self._reload_settings_from_disk()
@@ -457,7 +451,6 @@ class ChatbotDesktopApp(tk.Tk):
         try:
             self._reload_settings_from_disk()
             self.llm_api_key.set(self.settings.llm_api_key)
-            self.weather_api_key.set(self.settings.weather_api_key)
             self.status.set("配置已重新加载")
         except Exception as exc:
             self._show_error(exc)

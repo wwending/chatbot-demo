@@ -23,7 +23,6 @@ class Settings(BaseSettings):
     llm_max_retries: int = 2
 
     embedding_model: str = "local-hashing-demo"
-    weather_api_key: str = ""
 
     chunk_size: int = 500
     chunk_overlap: int = 80

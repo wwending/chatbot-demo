@@ -53,22 +53,18 @@ knowledge\
 
 ## Weather API
 
-The desktop client uses demo weather when no API key is configured. To enable real weather:
-
-1. Create a `.env` file next to `chatbot-demo.exe`.
-2. Add your OpenWeather API key:
-
-```env
-WEATHER_API_KEY=your_openweather_api_key
-```
-
-3. Restart the desktop client.
+The desktop client uses Open-Meteo for weather lookup and does not require an API key. Users can ask for current weather and forecasts, such as `上海天气怎么样`, `明天临沂天气`, `武汉未来一周天气`, `未来十五天武汉天气`, or `New York weather`.
 
 The built-in weather tool calls:
 
 ```text
-https://api.openweathermap.org/data/2.5/weather
+https://geocoding-api.open-meteo.com/v1/search
+https://api.open-meteo.com/v1/forecast
 ```
+
+The Forecast API is used for both current weather and daily forecast. Future weather supports tomorrow, the day after tomorrow, and future N-day ranges up to 16 days. Queries beyond 16 days return a friendly limit message instead of calling Open-Meteo for the unsupported range.
+
+The `.env` file is still used for model settings such as `LLM_API_KEY`, but packaged builds do not need `WEATHER_API_KEY` in `dist\.env`.
 
 ## Notes
 

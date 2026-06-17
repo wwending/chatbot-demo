@@ -79,24 +79,16 @@
 - `app/services/tool_service.py` 已重写为正常 UTF-8 中文。
 - `app/services/intent_service.py` 已重写为正常 UTF-8 中文。
 - `北京时间` 会识别为时间工具。
-- `上海天气怎么样` 等输入会识别为天气工具。
-- 未配置真实天气 API 时，会返回 Demo 天气并提示如何配置。
-- 真实天气使用 OpenWeather：
+- `上海天气怎么样`、`查询武汉天气`、`明天临沂天气`、`武汉未来一周天气`、`未来十五天武汉天气`、`New York weather` 等输入会识别为天气工具。
+- 天气工具使用 Open-Meteo Geocoding API 解析城市，再使用 Open-Meteo Forecast API 查询当前天气和 daily forecast。
+- 已支持当前天气、明天、后天、未来 N 天天气预报；Open-Meteo daily forecast 最多支持未来 16 天。
+- 天气查询不需要 `WEATHER_API_KEY`，也不需要用户在 `dist/.env` 中配置天气 Key。
+- `.env` 仍用于 `LLM_API_KEY` 等模型配置。
 
 ```text
-https://api.openweathermap.org/data/2.5/weather
+https://geocoding-api.open-meteo.com/v1/search
+https://api.open-meteo.com/v1/forecast
 ```
-
-在打包后的客户端中启用真实天气：
-
-1. 在 `dist/chatbot-demo.exe` 同目录创建 `.env`
-2. 写入：
-
-```env
-WEATHER_API_KEY=your_openweather_api_key
-```
-
-3. 重启客户端
 
 ## 验证结果
 
@@ -111,7 +103,7 @@ python -m PyInstaller chatbot-demo.spec --clean --noconfirm
 当前测试结果：
 
 ```text
-13 passed
+38 passed
 ```
 
 ## 注意事项
