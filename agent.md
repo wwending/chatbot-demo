@@ -1,105 +1,129 @@
 # Agent Progress
 
-## Current Branch
+## 当前分支
 
-- Branch: `exe-package`
-- Goal: package the chatbot demo as a native Windows desktop client, not a browser-based local web app.
-- Current executable: `dist/chatbot-demo.exe`
-- Formal build output: only use `dist/`.
+- 分支：`exe-package`
+- 目标：把现有聊天机器人 Demo 打包成原生 Windows 桌面客户端，不再通过浏览器打开本地网页。
+- 正式产物目录：只使用 `dist/`
+- 当前可执行文件：`dist/chatbot-demo.exe`
 
-## Completed Work
+## 已完成工作
 
-- Created a native Tkinter desktop client in `launch_desktop.py`.
-- The desktop app calls the existing Python chat service directly through `handle_chat()`.
-- The app does not open a browser and does not require the React dev server.
-- Added runtime path helpers in `app/runtime.py` so packaged data is written next to the exe.
-- Updated packaged settings in `app/config.py` so a `.env` file next to the exe can configure keys such as `WEATHER_API_KEY`.
-- Added PyInstaller packaging:
+- 新增原生 Tkinter 桌面客户端：`launch_desktop.py`
+- 桌面客户端直接调用 Python 业务层 `handle_chat()`，不通过 HTTP 调用后端。
+- 客户端不打开浏览器，也不依赖 React dev server。
+- 新增运行时路径辅助：`app/runtime.py`
+- 更新打包环境配置：`app/config.py`
+  - exe 运行时会读取 exe 同目录下的 `.env`
+  - `data/`、`knowledge/`、向量库文件写入 exe 同目录
+- 新增 PyInstaller 打包配置：
   - `chatbot-demo.spec`
   - `requirements-build.txt`
   - `packaging/build_exe.ps1`
   - `docs/PACKAGING_EXE.md`
-- Runtime data is stored beside the exe:
-  - `data/chatbot.db`
-  - `data/vector_store.json`
-  - `knowledge/`
-- Added `.gitignore` entries for build output folders.
+- `packaging/build_exe.ps1` 已设置：
+  - `PYTHONUTF8=1`
+  - UTF-8 控制台输出
+- `.gitignore` 已忽略构建产物目录：
+  - `build/`
+  - `dist/`
 
-## Desktop UI Progress
+## 桌面 UI 进度
 
-- Main UI is now Chinese-first and UTF-8 source text is used in edited files.
-- Build script sets `PYTHONUTF8=1` and UTF-8 console output before packaging.
-- Layout:
-  - Top title and status pill
-  - Left brand/workspace/session panel
-  - Center conversation panel
-  - Right inspector panel with separate sections for system status, recent response, tool result, RAG sources, and knowledge base actions
-- Matched the web demo style more closely:
-  - Brand area with a compact icon mark
-  - Section titles with small symbolic icons
-  - System status values with green/amber color states
-  - Tool result and RAG source areas separated into their own cards
-- Conversation area now uses real left/right chat bubbles instead of a plain text transcript:
-  - User messages align to the right with teal bubbles
-  - Assistant messages align to the left with light bubbles
-  - Assistant metadata is shown under the message
-  - Message bubbles support right-click copy
-- Added session deletion from the desktop client and `delete_session()` in the SQLite data layer.
-- Added Chinese sample prompts:
-  - `你好`
-  - `北京时间`
-  - `城市天气` -> fills `上海天气`
-  - `知识库问答` -> fills `根据知识库介绍项目技术栈`
-- Added a Chinese welcome state for new chats.
-- Improved selection colors so copying text no longer turns the selected text white/invisible.
-- Improved visual styling with Chinese UI fonts, clearer spacing, softer colors, and more consistent buttons.
+- UI 已改为中文优先，已编辑文件使用 UTF-8 中文字符串。
+- 布局接近原网页端：
+  - 左侧：品牌区、用户 ID、会话列表
+  - 中间：聊天对话区
+  - 右侧：信息检查面板
+- 右侧面板已拆分为多个区块：
+  - 系统状态
+  - 最近响应
+  - 工具结果
+  - RAG 来源
+  - 知识库
+- 系统状态支持颜色标识：
+  - `ok` / `ready` 使用绿色
+  - `offline-demo` / `missing` 使用橙色
+- 已添加小图标符号，靠近网页端风格。
+- 聊天区已改成网页端类似的左右气泡形式：
+  - 用户消息靠右，使用绿色气泡
+  - 助手消息靠左，使用浅色气泡
+  - 助手消息下方显示 `intent | model | latency`
+- 消息气泡支持右键复制。
+- 新会话有中文欢迎态。
+- 复制/选中时不会再出现文字变白不可见的问题。
 
-## Tool And Weather Progress
+## 会话删除
 
-- Rewrote `app/services/tool_service.py` in proper Chinese UTF-8.
-- Rewrote `app/services/intent_service.py` in proper Chinese UTF-8.
-- `北京时间` is recognized as a time tool request.
-- `上海天气怎么样` and similar inputs are recognized as weather tool requests.
-- Weather demo mode now explains how to configure a real API key.
-- Real weather uses OpenWeather:
+- 桌面客户端左侧已增加“删除会话”按钮。
+- 删除前会弹出确认框。
+- 新增数据库函数：`delete_session(session_id)`
+- 删除会话时会同步删除：
+  - `sessions`
+  - `messages`
+  - `keyword_hits`
+  - `model_outputs`
+- 已新增测试覆盖会话删除。
+
+## 示例问题
+
+桌面端示例按钮：
+
+- `你好`
+- `北京时间`
+- `城市天气`，点击后填入 `上海天气`
+- `知识库问答`，点击后填入 `根据知识库介绍项目技术栈`
+
+## 工具和天气
+
+- `app/services/tool_service.py` 已重写为正常 UTF-8 中文。
+- `app/services/intent_service.py` 已重写为正常 UTF-8 中文。
+- `北京时间` 会识别为时间工具。
+- `上海天气怎么样` 等输入会识别为天气工具。
+- 未配置真实天气 API 时，会返回 Demo 天气并提示如何配置。
+- 真实天气使用 OpenWeather：
 
 ```text
 https://api.openweathermap.org/data/2.5/weather
 ```
 
-To enable real weather for the packaged client, create `dist/.env` next to `chatbot-demo.exe`:
+在打包后的客户端中启用真实天气：
+
+1. 在 `dist/chatbot-demo.exe` 同目录创建 `.env`
+2. 写入：
 
 ```env
 WEATHER_API_KEY=your_openweather_api_key
 ```
 
-Then restart the client.
+3. 重启客户端
 
-## Verification
+## 验证结果
 
-Recent checks passed:
+最近通过的验证：
 
 ```powershell
-python -m py_compile launch_desktop.py app\config.py app\services\tool_service.py app\services\intent_service.py
+python -m py_compile launch_desktop.py app\config.py app\services\tool_service.py app\services\intent_service.py app\db\database.py
 python -m pytest
 python -m PyInstaller chatbot-demo.spec --clean --noconfirm
 ```
 
-Known test result:
+当前测试结果：
 
 ```text
 13 passed
 ```
 
-## Notes
+## 注意事项
 
-- The older React frontend still exists for the original web demo and should not be removed accidentally.
-- If `dist/chatbot-demo.exe` is open, PyInstaller cannot overwrite it. Close the running client before rebuilding the formal exe.
-- Some older files in the repository may still contain mojibake from earlier encoding issues; the most important desktop path and tool/intent path have been corrected.
+- 正式构建和运行统一使用 `dist/chatbot-demo.exe`。
+- 如果 `dist/chatbot-demo.exe` 正在运行，PyInstaller 无法覆盖它，需要先关闭客户端。
+- React 前端仍保留给原网页 Demo，不要误删 `frontend/`。
+- 仓库中仍有少量旧文件可能存在历史乱码，当前桌面客户端主链路、工具链路、天气链路和测试已改成 UTF-8 中文。
 
-## Suggested Next Steps
+## 建议下一步
 
-- Continue polishing the desktop UI after visual inspection in the running exe.
-- Consider replacing Tkinter `Text`-tag message bubbles with a scrollable frame of per-message widgets for a more modern chat layout.
-- Consider adding a Settings panel for editing `.env` values from inside the client.
-- Consider adding an app icon to `chatbot-demo.spec`.
+- 继续对照网页端截图微调桌面客户端间距、颜色和气泡尺寸。
+- 给 `chatbot-demo.spec` 增加正式 app 图标。
+- 增加设置面板，用于在客户端内编辑 `.env` 配置。
+- 如果 Tkinter 的视觉上限不够，后续可评估 PySide6 / Qt，但这会增加打包体积和依赖复杂度。
