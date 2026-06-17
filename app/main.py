@@ -34,7 +34,10 @@ def startup() -> None:
     settings = get_settings()
     settings.knowledge_dir.mkdir(parents=True, exist_ok=True)
     settings.vector_store_path.parent.mkdir(parents=True, exist_ok=True)
-    LocalVectorStore()
+    if not settings.vector_store_path.exists():
+        import_knowledge()
+    else:
+        LocalVectorStore()
 
 
 @app.get("/health")

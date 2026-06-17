@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.db.database import delete_session, list_messages
 from app.main import app
 from app.rag.ingest import import_knowledge
 
@@ -34,3 +35,11 @@ def test_chat_rag():
     payload = response.json()
     assert payload["intent"] == "rag"
     assert payload["sources"]
+
+
+def test_delete_session_removes_messages():
+    response = client.post("/chat", json={"user_id": "delete-test", "message": "你好"})
+    session_id = response.json()["session_id"]
+    assert list_messages(session_id)
+    assert delete_session(session_id) is True
+    assert list_messages(session_id) == []

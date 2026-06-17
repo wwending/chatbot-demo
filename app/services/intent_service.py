@@ -34,8 +34,8 @@ def detect_intent(message: str) -> IntentResult:
         keyword, reply = keyword_hit
         return IntentResult(intent="keyword", keyword=keyword, keyword_reply=reply)
 
-    if lowered.startswith("/time") or "现在几点" in text or "当前时间" in text:
-        argument = text.replace("/time", "", 1).strip() if lowered.startswith("/time") else None
+    if lowered.startswith("/time") or "现在几点" in text or "当前时间" in text or "北京时间" in text:
+        argument = text.replace("/time", "", 1).strip() if lowered.startswith("/time") else _extract_time_location(text)
         return IntentResult(intent="tool", command="time", argument=argument)
 
     if any(hint in text for hint in RAG_HINTS):
@@ -54,11 +54,23 @@ def detect_intent(message: str) -> IntentResult:
     return IntentResult(intent="chat")
 
 
+def _extract_time_location(text: str) -> str | None:
+    if "北京时间" in text:
+        return "北京"
+    match = re.search(r"([\u4e00-\u9fa5A-Za-z ]+)(?:现在几点|当前时间|时间)", text)
+    if match:
+        city = match.group(1)
+        for prefix in ("查询", "查一下", "现在", "当前"):
+            city = city.replace(prefix, "")
+        return city.strip() or None
+    return None
+
+
 def _extract_city_from_weather(text: str) -> str | None:
     match = re.search(r"([\u4e00-\u9fa5A-Za-z]+)天气", text)
     if match:
         city = match.group(1)
-        for prefix in ("查询", "查一下", "今天", "明天", "后天"):
+        for prefix in ("查询", "查一下", "今天", "明天", "后天", "城市"):
             city = city.replace(prefix, "")
         return city.strip() or None
     return None

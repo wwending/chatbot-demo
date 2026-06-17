@@ -4,6 +4,8 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.runtime import is_frozen, runtime_path
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
@@ -32,4 +34,11 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    if is_frozen():
+        settings = Settings(_env_file=runtime_path(".env"))
+        settings.db_path = runtime_path("data", "chatbot.db")
+        settings.knowledge_dir = runtime_path("knowledge")
+        settings.vector_store_path = runtime_path("data", "vector_store.json")
+        return settings
+    settings = Settings()
+    return settings

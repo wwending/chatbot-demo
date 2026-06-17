@@ -7,9 +7,10 @@ def test_keyword_intent():
 
 
 def test_time_intent():
-    result = detect_intent("/time 纽约")
+    result = detect_intent("北京时间")
     assert result.intent == "tool"
     assert result.command == "time"
+    assert result.argument == "北京"
 
 
 def test_weather_intent():
