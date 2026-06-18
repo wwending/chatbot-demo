@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import queue
 import shutil
 import threading
 import tkinter as tk
@@ -9,8 +10,11 @@ from pathlib import Path
 from tkinter import filedialog, font as tkfont, messagebox, ttk
 from typing import Any
 
+import customtkinter as ctk
+
 from app.config import get_settings
 from app.db.database import delete_session, init_db, list_messages, list_sessions
+from app.example_questions import pick_home_examples
 from app.rag.ingest import import_knowledge
 from app.rag.vector_store import vector_store_ready
 from app.runtime import runtime_path, seed_runtime_knowledge
@@ -42,15 +46,27 @@ ASSISTANT_BG = "#FFFFFF"
 
 FONT = "Microsoft YaHei UI"
 FONT_FALLBACK = "Segoe UI"
+FONT_APP_TITLE = (FONT, 23, "bold")
+FONT_TITLE = (FONT, 16, "bold")
+FONT_SECTION = (FONT, 15, "bold")
+FONT_BODY = (FONT, 14)
+FONT_CHAT = (FONT, 15)
+FONT_CHAT_TITLE = (FONT, 15, "bold")
+FONT_INPUT = (FONT, 15)
+FONT_BUTTON = (FONT, 14)
+FONT_SESSION = (FONT, 14, "bold")
+FONT_META = (FONT, 12)
+FONT_STATUS = (FONT, 13)
+FONT_STATUS_BOLD = (FONT, 13, "bold")
 
 
-class ChatbotDesktopApp(tk.Tk):
+class ChatbotDesktopApp(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
         self.title("个人知识问答助手")
         self.geometry("1280x800")
         self.minsize(1100, 700)
-        self.configure(bg=BG)
+        self.configure(fg_color=BG)
 
         self.settings = get_settings()
         self.session_id: str | None = None
@@ -63,14 +79,16 @@ class ChatbotDesktopApp(tk.Tk):
         self.config_expanded = tk.BooleanVar(value=False)
         self.chat_has_content = False
         self.sessions: list[dict[str, Any]] = []
-        self.session_cards: list[tk.Frame] = []
+        self.session_cards: list[ctk.CTkFrame] = []
         self.loading_row: tk.Widget | None = None
-        self.loading_label: tk.Label | None = None
+        self.loading_label: ctk.CTkLabel | None = None
         self.loading_after_id: str | None = None
         self.loading_started_at = 0.0
         self.loading_tick = 0
         self.loading_base_text = "正在处理"
         self.is_sending = False
+        self.home_examples = pick_home_examples()
+        self.ui_queue: queue.Queue[tuple[str, Any]] = queue.Queue()
         self._configure_logging()
 
         self._initialize_runtime()
@@ -79,6 +97,7 @@ class ChatbotDesktopApp(tk.Tk):
         self.refresh_status()
         self.refresh_sessions()
         self._show_welcome()
+        self._drain_ui_queue()
 
     def _configure_logging(self) -> None:
         log_path = runtime_path("data", "desktop.log")
@@ -99,33 +118,37 @@ class ChatbotDesktopApp(tk.Tk):
             import_knowledge()
 
     def _configure_styles(self) -> None:
+        ctk.set_appearance_mode("light")
+        ctk.set_default_color_theme("green")
         style = ttk.Style(self)
         try:
             style.theme_use("clam")
         except tk.TclError:
             pass
 
-        base_font = (FONT, 10)
+        ctk.set_widget_scaling(1.05)
+
+        base_font = FONT_BODY
         style.configure(".", font=base_font, background=BG, foreground=TEXT)
         style.configure("App.TFrame", background=BG)
         style.configure("Surface.TFrame", background=CARD)
         style.configure("Chat.TFrame", background=CHAT_BG)
         style.configure("Header.TFrame", background=BG)
         style.configure("Divider.TFrame", background=BORDER)
-        style.configure("Title.TLabel", background=BG, foreground=TEXT, font=(FONT, 17, "bold"))
-        style.configure("Subtitle.TLabel", background=BG, foreground=MUTED, font=(FONT, 9))
-        style.configure("PanelTitle.TLabel", background=CARD, foreground=TEXT, font=(FONT, 11, "bold"))
-        style.configure("SmallTitle.TLabel", background=CARD, foreground=TEXT, font=(FONT, 10, "bold"))
-        style.configure("Muted.TLabel", background=CARD, foreground=MUTED, font=(FONT, 9))
-        style.configure("Body.TLabel", background=CARD, foreground=TEXT, font=(FONT, 10))
-        style.configure("Pill.TLabel", background=PRIMARY_TINT, foreground=PRIMARY_DARK, padding=(10, 4), font=(FONT, 9, "bold"))
+        style.configure("Title.TLabel", background=BG, foreground=TEXT, font=FONT_APP_TITLE)
+        style.configure("Subtitle.TLabel", background=BG, foreground=MUTED, font=FONT_STATUS)
+        style.configure("PanelTitle.TLabel", background=CARD, foreground=TEXT, font=FONT_SECTION)
+        style.configure("SmallTitle.TLabel", background=CARD, foreground=TEXT, font=FONT_STATUS_BOLD)
+        style.configure("Muted.TLabel", background=CARD, foreground=MUTED, font=FONT_META)
+        style.configure("Body.TLabel", background=CARD, foreground=TEXT, font=FONT_BODY)
+        style.configure("Pill.TLabel", background=PRIMARY_TINT, foreground=PRIMARY_DARK, padding=(10, 4), font=FONT_STATUS_BOLD)
         style.configure("Section.TFrame", background=CARD_SOFT)
-        style.configure("SectionTitle.TLabel", background=CARD_SOFT, foreground=TEXT, font=(FONT, 10, "bold"))
-        style.configure("SectionBody.TLabel", background=CARD_SOFT, foreground=MUTED_DARK, font=(FONT, 9))
-        style.configure("StatusName.TLabel", background=CARD_SOFT, foreground=MUTED, font=(FONT, 9))
-        style.configure("Ok.TLabel", background=CARD_SOFT, foreground=SUCCESS, font=(FONT, 9, "bold"))
-        style.configure("Warn.TLabel", background=CARD_SOFT, foreground=WARNING, font=(FONT, 9, "bold"))
-        style.configure("Info.TLabel", background=CARD_SOFT, foreground=PRIMARY_DARK, font=(FONT, 9, "bold"))
+        style.configure("SectionTitle.TLabel", background=CARD_SOFT, foreground=TEXT, font=FONT_SECTION)
+        style.configure("SectionBody.TLabel", background=CARD_SOFT, foreground=MUTED_DARK, font=FONT_STATUS)
+        style.configure("StatusName.TLabel", background=CARD_SOFT, foreground=MUTED, font=FONT_STATUS)
+        style.configure("Ok.TLabel", background=CARD_SOFT, foreground=SUCCESS, font=FONT_STATUS_BOLD)
+        style.configure("Warn.TLabel", background=CARD_SOFT, foreground=WARNING, font=FONT_STATUS_BOLD)
+        style.configure("Info.TLabel", background=CARD_SOFT, foreground=PRIMARY_DARK, font=FONT_STATUS_BOLD)
         style.configure("Primary.TButton", padding=(14, 8), background=PRIMARY, foreground="#FFFFFF", bordercolor=PRIMARY)
         style.map("Primary.TButton", background=[("active", PRIMARY_DARK), ("pressed", PRIMARY_DARK)])
         style.configure("Secondary.TButton", padding=(12, 8), background=CARD_SOFT, foreground=TEXT, bordercolor=BORDER_DARK)
@@ -141,19 +164,31 @@ class ChatbotDesktopApp(tk.Tk):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
-        header = ttk.Frame(self, style="Header.TFrame", padding=(22, 14, 22, 8))
+        header = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
         header.grid(row=0, column=0, sticky="ew")
+        header.grid_configure(padx=22, pady=(14, 8))
         header.columnconfigure(0, weight=1)
-        ttk.Label(header, text="个人知识问答助手", style="Title.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(
+        ctk.CTkLabel(header, text="个人知识问答助手", text_color=TEXT, font=FONT_APP_TITLE).grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(
             header,
             text="本地桌面客户端 · 聊天 · 工具调用 · 知识库问答",
-            style="Subtitle.TLabel",
+            text_color=MUTED,
+            font=FONT_STATUS,
         ).grid(row=1, column=0, sticky="w", pady=(2, 0))
-        ttk.Label(header, textvariable=self.status, style="Pill.TLabel").grid(row=0, column=1, rowspan=2, sticky="e")
+        ctk.CTkLabel(
+            header,
+            textvariable=self.status,
+            fg_color=PRIMARY_TINT,
+            text_color=PRIMARY_DARK,
+            corner_radius=14,
+            padx=10,
+            pady=4,
+            font=FONT_STATUS_BOLD,
+        ).grid(row=0, column=1, rowspan=2, sticky="e")
 
-        body = ttk.Frame(self, style="App.TFrame", padding=(22, 8, 22, 22))
+        body = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
         body.grid(row=1, column=0, sticky="nsew")
+        body.grid_configure(padx=22, pady=(8, 22))
         body.columnconfigure(0, minsize=270)
         body.columnconfigure(1, weight=1)
         body.columnconfigure(2, minsize=320)
@@ -163,127 +198,124 @@ class ChatbotDesktopApp(tk.Tk):
         self._build_chat_panel(body)
         self._build_right_panel(body)
 
-    def _build_left_panel(self, parent: ttk.Frame) -> None:
-        left = tk.Frame(parent, bg=CARD, bd=0, highlightthickness=1, highlightbackground=BORDER)
+    def _build_left_panel(self, parent: ctk.CTkFrame) -> None:
+        left = ctk.CTkFrame(parent, fg_color=CARD, border_width=1, border_color=BORDER, corner_radius=8)
         left.grid(row=0, column=0, sticky="ns", padx=(0, 12))
         left.grid_propagate(False)
         left.configure(width=270)
         left.columnconfigure(0, weight=1)
         left.rowconfigure(8, weight=1)
 
-        content = tk.Frame(left, bg=CARD, padx=16, pady=16)
+        content = ctk.CTkFrame(left, fg_color=CARD, corner_radius=8)
         content.grid(row=0, column=0, rowspan=9, sticky="nsew")
+        content.grid_configure(padx=16, pady=16)
         content.columnconfigure(0, weight=1)
         content.rowconfigure(8, weight=1)
 
-        tk.Label(content, text="个人知识问答助手", bg=CARD, fg=TEXT, font=(FONT, 13, "bold")).grid(row=0, column=0, sticky="w")
-        tk.Label(
+        ctk.CTkLabel(content, text="个人知识问答助手", text_color=TEXT, font=FONT_TITLE).grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(
             content,
             text="本地桌面客户端 · 聊天 · 工具调用 · 知识库问答",
-            bg=CARD,
-            fg=MUTED,
-            font=(FONT, 9),
+            text_color=MUTED,
+            font=FONT_STATUS,
             wraplength=230,
             justify="left",
         ).grid(row=1, column=0, sticky="w", pady=(4, 14))
 
-        tk.Label(content, text="用户 ID", bg=CARD, fg=MUTED, font=(FONT, 9)).grid(row=2, column=0, sticky="w")
-        ttk.Entry(content, textvariable=self.user_id).grid(row=3, column=0, sticky="ew", pady=(4, 12), ipady=4)
-        ttk.Button(content, text="新建会话", style="Primary.TButton", command=self.new_chat).grid(row=4, column=0, sticky="ew")
+        ctk.CTkLabel(content, text="用户 ID", text_color=MUTED, font=FONT_STATUS).grid(row=2, column=0, sticky="w")
+        ctk.CTkEntry(content, textvariable=self.user_id, fg_color="#FFFFFF", border_color=BORDER_DARK, font=FONT_INPUT).grid(row=3, column=0, sticky="ew", pady=(4, 12))
+        ctk.CTkButton(content, text="新建会话", fg_color=PRIMARY, hover_color=PRIMARY_DARK, font=FONT_BUTTON, command=self.new_chat).grid(row=4, column=0, sticky="ew")
 
-        actions = tk.Frame(content, bg=CARD)
+        actions = ctk.CTkFrame(content, fg_color=CARD, corner_radius=0)
         actions.grid(row=5, column=0, sticky="ew", pady=(8, 0))
         actions.columnconfigure(0, weight=1)
         actions.columnconfigure(1, weight=1)
-        ttk.Button(actions, text="刷新", style="Secondary.TButton", command=self.refresh_sessions).grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        ttk.Button(actions, text="删除", style="Danger.TButton", command=self.delete_selected_session).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        ctk.CTkButton(actions, text="刷新", fg_color=CARD_SOFT, text_color=TEXT, hover_color=PRIMARY_TINT, font=FONT_BUTTON, command=self.refresh_sessions).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ctk.CTkButton(actions, text="删除", fg_color=DANGER_SOFT, text_color=DANGER, hover_color="#FEE2E2", font=FONT_BUTTON, command=self.delete_selected_session).grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
-        tk.Label(content, text="会话", bg=CARD, fg=TEXT, font=(FONT, 11, "bold")).grid(row=6, column=0, sticky="w", pady=(18, 0))
-        tk.Label(content, textvariable=self.session_count, bg=CARD, fg=MUTED, font=(FONT, 9)).grid(row=7, column=0, sticky="w", pady=(2, 8))
+        ctk.CTkLabel(content, text="会话", text_color=TEXT, font=FONT_SECTION).grid(row=6, column=0, sticky="w", pady=(18, 0))
+        ctk.CTkLabel(content, textvariable=self.session_count, text_color=MUTED, font=FONT_META).grid(row=7, column=0, sticky="w", pady=(2, 8))
 
-        self.sessions_canvas = tk.Canvas(content, bg=CARD, highlightthickness=0, borderwidth=0)
-        self.sessions_canvas.grid(row=8, column=0, sticky="nsew")
-        self.sessions_frame = tk.Frame(self.sessions_canvas, bg=CARD)
-        self.sessions_window = self.sessions_canvas.create_window((0, 0), window=self.sessions_frame, anchor="nw")
-        session_scroll = ttk.Scrollbar(content, orient="vertical", command=self.sessions_canvas.yview)
-        session_scroll.grid(row=8, column=1, sticky="ns")
-        self.sessions_canvas.configure(yscrollcommand=session_scroll.set)
-        self.sessions_frame.bind("<Configure>", lambda _event: self.sessions_canvas.configure(scrollregion=self.sessions_canvas.bbox("all")))
-        self.sessions_canvas.bind("<Configure>", lambda event: self.sessions_canvas.itemconfigure(self.sessions_window, width=event.width))
+        self.sessions_frame = ctk.CTkScrollableFrame(content, fg_color=CARD, corner_radius=0)
+        self.sessions_frame.grid(row=8, column=0, sticky="nsew")
 
-    def _build_chat_panel(self, parent: ttk.Frame) -> None:
-        center = tk.Frame(parent, bg=CARD, bd=0, highlightthickness=1, highlightbackground=BORDER)
+    def _build_chat_panel(self, parent: ctk.CTkFrame) -> None:
+        center = ctk.CTkFrame(parent, fg_color=CARD, border_width=1, border_color=BORDER, corner_radius=8)
         center.grid(row=0, column=1, sticky="nsew")
         center.columnconfigure(0, weight=1)
         center.rowconfigure(1, weight=1)
 
-        toolbar = tk.Frame(center, bg=CARD, padx=16, pady=12)
+        toolbar = ctk.CTkFrame(center, fg_color=CARD, corner_radius=8)
         toolbar.grid(row=0, column=0, sticky="ew")
+        toolbar.grid_configure(padx=16, pady=12)
         toolbar.columnconfigure(0, weight=1)
-        tk.Label(toolbar, text="当前对话", bg=CARD, fg=TEXT, font=(FONT, 11, "bold")).grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(toolbar, text="当前对话", text_color=TEXT, font=FONT_SECTION).grid(row=0, column=0, sticky="w")
         samples = (
             ("你好", "你好"),
-            ("北京时间", "北京时间"),
-            ("城市天气", "上海天气"),
+            ("当前时间", "现在几点？"),
+            ("天气建议", "今天天气适合跑步吗？"),
             ("知识库问答", "根据知识库介绍项目"),
         )
         for idx, (label, prompt) in enumerate(samples):
-            ttk.Button(toolbar, text=label, style="Chip.TButton", command=lambda text=prompt: self.use_sample(text)).grid(
+            ctk.CTkButton(
+                toolbar,
+                text=label,
+                fg_color="#FFFFFF",
+                text_color=MUTED_DARK,
+                hover_color=PRIMARY_TINT,
+                border_width=1,
+                border_color=BORDER,
+                font=FONT_BUTTON,
+                width=82,
+                command=lambda text=prompt: self.use_sample(text),
+            ).grid(
                 row=0, column=idx + 1, padx=(8, 0)
             )
 
-        self.chat_canvas = tk.Canvas(center, bg=CHAT_BG, highlightthickness=0, borderwidth=0)
-        self.chat_canvas.grid(row=1, column=0, sticky="nsew")
-        chat_scroll = ttk.Scrollbar(center, orient="vertical", command=self.chat_canvas.yview)
-        chat_scroll.grid(row=1, column=1, sticky="ns")
-        self.chat_canvas.configure(yscrollcommand=chat_scroll.set)
-        self.messages_frame = tk.Frame(self.chat_canvas, bg=CHAT_BG)
-        self.messages_window = self.chat_canvas.create_window((0, 0), window=self.messages_frame, anchor="nw")
-        self.messages_frame.bind("<Configure>", self._sync_message_scrollregion)
-        self.chat_canvas.bind("<Configure>", self._sync_message_width)
-        self.chat_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.messages_frame = ctk.CTkScrollableFrame(center, fg_color=CHAT_BG, corner_radius=0)
+        self.messages_frame.grid(row=1, column=0, sticky="nsew")
+        self.messages_frame.columnconfigure(0, weight=1)
 
-        input_bar = tk.Frame(center, bg=CARD, padx=16, pady=14)
-        input_bar.grid(row=2, column=0, columnspan=2, sticky="ew")
+        input_bar = ctk.CTkFrame(center, fg_color=CARD, corner_radius=8)
+        input_bar.grid(row=2, column=0, sticky="ew")
+        input_bar.grid_configure(padx=16, pady=14)
         input_bar.columnconfigure(0, weight=1)
 
-        tk.Label(
+        ctk.CTkLabel(
             input_bar,
             textvariable=self.input_status,
-            bg=CARD,
-            fg=MUTED_DARK,
-            font=(FONT, 9),
+            text_color=MUTED_DARK,
+            font=FONT_STATUS,
             anchor="w",
         ).grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
 
-        input_shell = tk.Frame(input_bar, bg="#FFFFFF", highlightthickness=1, highlightbackground=BORDER_DARK, bd=0)
+        input_shell = ctk.CTkFrame(input_bar, fg_color="#FFFFFF", border_width=1, border_color=BORDER_DARK, corner_radius=8)
         input_shell.grid(row=1, column=0, sticky="ew", padx=(0, 10))
         input_shell.columnconfigure(0, weight=1)
-        self.message_input = tk.Text(
+        self.message_input = ctk.CTkTextbox(
             input_shell,
-            height=2,
+            height=70,
             wrap="word",
-            bg="#FFFFFF",
-            fg=TEXT,
-            bd=0,
+            fg_color="#FFFFFF",
+            text_color=TEXT,
+            border_width=0,
             padx=12,
             pady=9,
-            insertbackground=PRIMARY,
-            font=(FONT, 10),
+            font=FONT_INPUT,
         )
         self.message_input.grid(row=0, column=0, sticky="ew")
-        self.placeholder = "输入消息，例如：明天武汉天气 / 根据知识库介绍项目"
+        self.placeholder = "输入消息，例如：今天天气适合跑步吗？ / 根据知识库介绍项目"
         self.placeholder_visible = False
         self._show_placeholder()
         self.message_input.bind("<FocusIn>", self._hide_placeholder)
         self.message_input.bind("<FocusOut>", self._maybe_show_placeholder)
         self.message_input.bind("<Return>", self._handle_enter)
         self.message_input.bind("<Shift-Return>", self._handle_shift_enter)
-        self.send_button = ttk.Button(input_bar, text="发送", style="Primary.TButton", command=self.send_message)
+        self.send_button = ctk.CTkButton(input_bar, text="发送", fg_color=PRIMARY, hover_color=PRIMARY_DARK, font=FONT_BUTTON, command=self.send_message)
         self.send_button.grid(row=1, column=1, sticky="ns")
 
-    def _build_right_panel(self, parent: ttk.Frame) -> None:
-        right = tk.Frame(parent, bg=CARD, bd=0, highlightthickness=1, highlightbackground=BORDER)
+    def _build_right_panel(self, parent: ctk.CTkFrame) -> None:
+        right = ctk.CTkFrame(parent, fg_color=CARD, border_width=1, border_color=BORDER, corner_radius=8)
         right.grid(row=0, column=2, sticky="ns", padx=(12, 0))
         right.grid_propagate(False)
         right.configure(width=320)
@@ -291,15 +323,16 @@ class ChatbotDesktopApp(tk.Tk):
         right.rowconfigure(3, weight=1)
         right.rowconfigure(4, weight=1)
 
-        content = tk.Frame(right, bg=CARD, padx=14, pady=14)
+        content = ctk.CTkFrame(right, fg_color=CARD, corner_radius=8)
         content.grid(row=0, column=0, sticky="nsew")
+        content.grid_configure(padx=14, pady=14)
         content.columnconfigure(0, weight=1)
         content.rowconfigure(3, weight=1)
         content.rowconfigure(4, weight=1)
 
         status = self._section(content, 0, "系统状态")
         self.health_labels: dict[str, tk.StringVar] = {}
-        self.health_value_labels: dict[str, ttk.Label] = {}
+        self.health_value_labels: dict[str, ctk.CTkLabel] = {}
         for row, (key, label) in enumerate((("api", "API"), ("sqlite", "SQLite"), ("vector_store", "向量库"), ("model", "模型"))):
             self._status_row(status, row, key, label)
 
@@ -327,31 +360,60 @@ class ChatbotDesktopApp(tk.Tk):
         self._set_text(self.source_view, "知识库问答会在这里列出引用片段。")
 
         knowledge = self._section(content, 4, "知识库")
-        ttk.Button(knowledge, text="导入默认知识库", style="Secondary.TButton", command=self.import_default_knowledge).grid(
+        ctk.CTkButton(
+            knowledge,
+            text="导入默认知识库",
+            fg_color=CARD_SOFT,
+            text_color=TEXT,
+            hover_color=PRIMARY_TINT,
+            font=FONT_BUTTON,
+            command=self.import_default_knowledge,
+        ).grid(
             row=1, column=0, sticky="ew", pady=(8, 6)
         )
-        ttk.Button(knowledge, text="上传 .txt / .md", style="Secondary.TButton", command=self.upload_knowledge_file).grid(row=2, column=0, sticky="ew")
+        ctk.CTkButton(
+            knowledge,
+            text="上传 .txt / .md",
+            fg_color=CARD_SOFT,
+            text_color=TEXT,
+            hover_color=PRIMARY_TINT,
+            font=FONT_BUTTON,
+            command=self.upload_knowledge_file,
+        ).grid(row=2, column=0, sticky="ew")
         self.knowledge_note = tk.StringVar(value="默认知识库会在首次启动时准备。")
-        ttk.Label(knowledge, textvariable=self.knowledge_note, style="SectionBody.TLabel", wraplength=270).grid(
+        ctk.CTkLabel(knowledge, textvariable=self.knowledge_note, text_color=MUTED_DARK, font=FONT_STATUS, wraplength=270, justify="left").grid(
             row=3, column=0, sticky="w", pady=(8, 0)
         )
 
         config = self._section(content, 5, "配置区域")
-        self.config_toggle = ttk.Button(config, text="显示 API Key 配置", style="Secondary.TButton", command=self.toggle_config_panel)
+        self.config_toggle = ctk.CTkButton(
+            config,
+            text="显示 API Key 配置",
+            fg_color=CARD_SOFT,
+            text_color=TEXT,
+            hover_color=PRIMARY_TINT,
+            font=FONT_BUTTON,
+            command=self.toggle_config_panel,
+        )
         self.config_toggle.grid(row=1, column=0, sticky="ew", pady=(8, 0))
-        self.config_body = ttk.Frame(config, style="Section.TFrame")
+        self.config_body = ctk.CTkFrame(config, fg_color=CARD_SOFT, corner_radius=8)
         self.config_body.columnconfigure(0, weight=1)
-        ttk.Label(self.config_body, text="LLM API Key", style="StatusName.TLabel").grid(row=0, column=0, sticky="w", pady=(10, 3))
-        self.llm_key_entry = ttk.Entry(self.config_body, textvariable=self.llm_api_key, show="*")
+        ctk.CTkLabel(self.config_body, text="LLM API Key", text_color=MUTED, font=FONT_STATUS).grid(row=0, column=0, sticky="w", pady=(10, 3), padx=10)
+        self.llm_key_entry = ctk.CTkEntry(self.config_body, textvariable=self.llm_api_key, show="*", fg_color="#FFFFFF", border_color=BORDER_DARK, font=FONT_INPUT)
         self.llm_key_entry.grid(row=1, column=0, sticky="ew")
-        ttk.Checkbutton(
+        self.llm_key_entry.grid_configure(padx=10)
+        ctk.CTkCheckBox(
             self.config_body,
             text="显示密钥",
             variable=self.show_api_keys,
+            fg_color=PRIMARY,
+            hover_color=PRIMARY_DARK,
+            text_color=MUTED_DARK,
+            font=FONT_BUTTON,
             command=self.toggle_api_key_visibility,
-        ).grid(row=2, column=0, sticky="w", pady=(8, 0))
-        ttk.Button(self.config_body, text="保存配置", style="Primary.TButton", command=self.save_api_config).grid(row=3, column=0, sticky="ew", pady=(10, 6))
-        ttk.Button(self.config_body, text="重新加载配置", style="Secondary.TButton", command=self.reload_api_config).grid(row=4, column=0, sticky="ew")
+        ).grid(row=2, column=0, sticky="w", pady=(8, 0), padx=10)
+        ctk.CTkButton(self.config_body, text="保存配置", fg_color=PRIMARY, hover_color=PRIMARY_DARK, font=FONT_BUTTON, command=self.save_api_config).grid(row=3, column=0, sticky="ew", pady=(10, 6), padx=10)
+        ctk.CTkButton(self.config_body, text="重新加载配置", fg_color=CARD_SOFT, text_color=TEXT, hover_color=PRIMARY_TINT, font=FONT_BUTTON, command=self.reload_api_config).grid(row=4, column=0, sticky="ew", padx=10, pady=(0, 10))
 
     def refresh_status(self) -> None:
         model = self.settings.llm_model if self.settings.llm_api_key else "offline-demo"
@@ -418,12 +480,14 @@ class ChatbotDesktopApp(tk.Tk):
 
     def send_message(self, _event: object | None = None) -> None:
         if self.is_sending:
+            logging.info("send_blocked_busy session_id=%s", self.session_id)
             return
         message = self._input_text()
         if not message:
             return
-        self._set_busy(True)
+        self.is_sending = True
         try:
+            logging.info("send_start session_id=%s", self.session_id)
             self.message_input.delete("1.0", tk.END)
             self._maybe_show_placeholder()
             if not self.chat_has_content:
@@ -446,30 +510,74 @@ class ChatbotDesktopApp(tk.Tk):
             self._set_text(self.tool_view, "请求已发送，正在等待工具或模型返回。")
             self.loading_row = self._append_loading_message(self.loading_base_text)
             self._start_loading_animation()
+            self._set_busy(True)
             self.update_idletasks()
             request = ChatRequest(user_id=request_user_id, message=message, session_id=self.session_id)
             threading.Thread(target=self._send_message_worker, args=(request,), daemon=True).start()
         except Exception as exc:
             logging.exception("desktop send callback failed")
             self._show_error(exc)
+            self._finish_send("send_exception")
 
     def _send_message_worker(self, request: ChatRequest) -> None:
         try:
             response = asyncio.run(asyncio.wait_for(handle_chat(request), timeout=DESKTOP_REQUEST_TIMEOUT_SECONDS))
         except TimeoutError:
             logging.exception("desktop request timed out after %s seconds", DESKTOP_REQUEST_TIMEOUT_SECONDS)
-            self.after(0, self._show_timeout_error)
+            self._enqueue_ui("timeout", None)
             return
         except Exception as exc:
             logging.exception("desktop request failed")
-            self.after(0, lambda exc=exc: self._show_error(exc))
+            self._enqueue_ui("error", exc)
             return
-        self.after(0, lambda: self._show_response(response))
+        logging.info(
+            "worker_response session_id=%s intent=%s model=%s latency_ms=%s",
+            response.session_id,
+            response.intent,
+            response.model,
+            response.latency_ms,
+        )
+        self._enqueue_ui("response", response)
+
+    def _enqueue_ui(self, event: str, payload: Any) -> None:
+        self.ui_queue.put((event, payload))
+
+    def _drain_ui_queue(self) -> None:
+        while True:
+            try:
+                event, payload = self.ui_queue.get_nowait()
+            except queue.Empty:
+                break
+            request_event = event in {"response", "timeout", "error"}
+            handled = False
+            try:
+                if event == "response":
+                    self._show_response(payload)
+                    handled = True
+                    logging.info("ui_response_handled session_id=%s", payload.session_id)
+                elif event == "timeout":
+                    self._show_timeout_error()
+                    handled = True
+                elif event == "error":
+                    self._show_error(payload)
+                    handled = True
+                elif event == "import_result":
+                    self._show_import_result(payload)
+                else:
+                    logging.error("unknown desktop ui event: %s", event)
+            except Exception as exc:
+                logging.exception("desktop ui event failed event=%s", event)
+                try:
+                    self._show_error(exc)
+                except Exception:
+                    logging.exception("desktop error rendering failed")
+                    self.status.set("发生错误")
+            finally:
+                if request_event:
+                    self._finish_send(event if handled else f"{event}_failed")
+        self.after(50, self._drain_ui_queue)
 
     def _show_response(self, response: ChatResponse) -> None:
-        self._remove_loading()
-        self._set_busy(False)
-        self.input_status.set("")
         logging.info(
             "desktop request finished session_id=%s intent=%s model=%s latency_ms=%s",
             response.session_id,
@@ -486,7 +594,6 @@ class ChatbotDesktopApp(tk.Tk):
         self.response_labels["sources"].set(f"{len(response.sources)} 条")
         self._set_text(self.tool_view, self._format_tool_result(response))
         self._set_text(self.source_view, self._format_sources(response))
-        self.status.set("在线")
         self.refresh_status()
         self.refresh_sessions()
 
@@ -531,9 +638,10 @@ class ChatbotDesktopApp(tk.Tk):
         try:
             result = import_knowledge(path)
         except Exception as exc:
-            self.after(0, lambda exc=exc: self._show_error(exc))
+            logging.exception("desktop knowledge import failed")
+            self._enqueue_ui("error", exc)
             return
-        self.after(0, lambda: self._show_import_result(result))
+        self._enqueue_ui("import_result", result)
 
     def _show_import_result(self, result: dict[str, object]) -> None:
         lines = [f"已导入 {result.get('imported_files', 0)} 个文件，生成 {result.get('chunks', 0)} 个片段。"]
@@ -545,15 +653,11 @@ class ChatbotDesktopApp(tk.Tk):
         self.status.set("知识库已导入")
 
     def _show_error(self, exc: Exception) -> None:
-        self._remove_loading()
-        self._set_busy(False)
         self.status.set("发生错误")
         self.input_status.set("请求失败，详情已写入 data/desktop.log")
         self._append_message("助手", f"请求失败：{exc}\n\n详情已写入 data/desktop.log。", "assistant")
 
     def _show_timeout_error(self) -> None:
-        self._remove_loading()
-        self._set_busy(False)
         self.status.set("请求超时")
         self.input_status.set(f"请求超过 {DESKTOP_REQUEST_TIMEOUT_SECONDS} 秒未返回，已停止等待")
         self._append_message(
@@ -561,10 +665,21 @@ class ChatbotDesktopApp(tk.Tk):
             (
                 f"本次请求超过 {DESKTOP_REQUEST_TIMEOUT_SECONDS} 秒没有返回，客户端已停止等待。\n\n"
                 "这通常是模型 API 网络超时、服务端无响应或密钥/代理配置异常导致的。"
-                "你可以稍后重试，或先用“北京时间”“城市天气”确认工具链是否正常。"
+                "你可以稍后重试，或先用“当前时间”“天气建议”确认工具链是否正常。"
             ),
             "assistant",
         )
+
+    def _finish_send(self, reason: str) -> None:
+        self._remove_loading()
+        self._set_busy(False)
+        self.input_status.set("")
+        self.status.set("在线")
+        logging.info("send_finished reason=%s session_id=%s", reason, self.session_id)
+        try:
+            self._focus_input()
+        except tk.TclError:
+            logging.exception("desktop input focus restore failed")
 
     def toggle_config_panel(self) -> None:
         expanded = not self.config_expanded.get()
@@ -626,29 +741,57 @@ class ChatbotDesktopApp(tk.Tk):
 
     def _show_welcome(self) -> None:
         self._clear_messages()
-        outer = tk.Frame(self.messages_frame, bg=CHAT_BG)
+        outer = ctk.CTkFrame(self.messages_frame, fg_color=CHAT_BG, corner_radius=0)
         outer.pack(fill="both", expand=True, padx=28, pady=70)
-        card = tk.Frame(outer, bg=CARD, highlightthickness=1, highlightbackground=BORDER, padx=28, pady=24)
+        card = ctk.CTkFrame(outer, fg_color=CARD, border_width=1, border_color=BORDER, corner_radius=8)
         card.pack(anchor="center")
-        tk.Label(card, text="你好，我是你的本地知识问答助手", bg=CARD, fg=TEXT, font=(FONT, 17, "bold")).pack()
-        tk.Label(
+        card.pack_configure(padx=28, pady=24)
+        ctk.CTkLabel(card, text="你好，我是你的本地知识问答助手", text_color=TEXT, font=FONT_APP_TITLE).pack()
+        ctk.CTkLabel(
             card,
             text="可以直接提问，也可以从下面的示例开始。",
-            bg=CARD,
-            fg=MUTED,
-            font=(FONT, 10),
+            text_color=MUTED,
+            font=FONT_BODY,
         ).pack(pady=(8, 18))
-        examples = tk.Frame(card, bg=CARD)
+        examples = ctk.CTkFrame(card, fg_color=CARD, corner_radius=0)
         examples.pack()
-        for idx, sample in enumerate(("北京天气", "明天武汉天气", "北京时间", "根据知识库介绍项目")):
-            ttk.Button(examples, text=sample, style="Chip.TButton", command=lambda text=sample: self.use_sample(text)).grid(
+        for column in range(2):
+            examples.columnconfigure(column, weight=1)
+        for idx, sample in enumerate(self.home_examples):
+            text = sample["text"]
+            ctk.CTkButton(
+                examples,
+                text=text,
+                width=180,
+                fg_color="#FFFFFF",
+                text_color=MUTED_DARK,
+                hover_color=PRIMARY_TINT,
+                border_width=1,
+                border_color=BORDER,
+                font=FONT_BUTTON,
+                command=lambda value=text: self.use_sample(value),
+            ).grid(
                 row=idx // 2,
                 column=idx % 2,
                 padx=5,
                 pady=5,
                 sticky="ew",
             )
+        ctk.CTkButton(
+            card,
+            text="换一批",
+            fg_color=CARD_SOFT,
+            text_color=TEXT,
+            hover_color=PRIMARY_TINT,
+            font=FONT_BUTTON,
+            command=self.refresh_home_examples,
+        ).pack(pady=(14, 0))
         self.chat_has_content = False
+
+    def refresh_home_examples(self) -> None:
+        self.home_examples = pick_home_examples()
+        if not self.chat_has_content:
+            self._show_welcome()
 
     def _append_message(
         self,
@@ -659,18 +802,18 @@ class ChatbotDesktopApp(tk.Tk):
         response: ChatResponse | None = None,
     ) -> None:
         is_user = tag == "user"
-        row = tk.Frame(self.messages_frame, bg=CHAT_BG, padx=24, pady=10)
+        row = ctk.CTkFrame(self.messages_frame, fg_color=CHAT_BG, corner_radius=0)
         row.pack(fill="x", anchor="e" if is_user else "w")
+        row.pack_configure(padx=24, pady=10)
 
-        content_frame = tk.Frame(row, bg=CHAT_BG)
+        content_frame = ctk.CTkFrame(row, fg_color=CHAT_BG, corner_radius=0)
         content_frame.pack(side="right" if is_user else "left", anchor="e" if is_user else "w")
 
-        tk.Label(
+        ctk.CTkLabel(
             content_frame,
             text=label,
-            bg=CHAT_BG,
-            fg=PRIMARY_DARK if is_user else MUTED_DARK,
-            font=(FONT, 9, "bold"),
+            text_color=PRIMARY_DARK if is_user else MUTED_DARK,
+            font=FONT_STATUS_BOLD,
         ).pack(anchor="e" if is_user else "w")
 
         if is_user:
@@ -683,29 +826,29 @@ class ChatbotDesktopApp(tk.Tk):
         self._attach_copy_menu(bubble, content)
 
         if meta:
-            tk.Label(content_frame, text=meta, bg=CHAT_BG, fg=MUTED, font=(FONT, 9)).pack(anchor="w", pady=(6, 0))
+            ctk.CTkLabel(content_frame, text=meta, text_color=MUTED, font=FONT_META).pack(anchor="w", pady=(6, 0))
         self.messages_frame.update_idletasks()
-        self.chat_canvas.yview_moveto(1.0)
+        self._scroll_chat_to_bottom()
         self.chat_has_content = True
 
     def _append_loading_message(self, text: str) -> tk.Widget:
-        row = tk.Frame(self.messages_frame, bg=CHAT_BG, padx=24, pady=10)
+        row = ctk.CTkFrame(self.messages_frame, fg_color=CHAT_BG, corner_radius=0)
         row.pack(fill="x", anchor="w")
-        bubble = tk.Label(
+        row.pack_configure(padx=24, pady=10)
+        bubble = ctk.CTkLabel(
             row,
             text=text,
-            bg="#FFFFFF",
-            fg=MUTED_DARK,
-            padx=16,
-            pady=11,
-            font=(FONT, 10),
-            highlightthickness=1,
-            highlightbackground=BORDER,
+            fg_color="#FFFFFF",
+            text_color=MUTED_DARK,
+            corner_radius=8,
+            width=140,
+            height=42,
+            font=FONT_CHAT,
         )
         bubble.pack(side="left", anchor="w")
         self.loading_label = bubble
         self.messages_frame.update_idletasks()
-        self.chat_canvas.yview_moveto(1.0)
+        self._scroll_chat_to_bottom()
         return row
 
     def _remove_loading(self) -> None:
@@ -746,6 +889,7 @@ class ChatbotDesktopApp(tk.Tk):
     def _set_busy(self, busy: bool) -> None:
         self.is_sending = busy
         self.send_button.configure(state="disabled" if busy else "normal")
+        self.message_input.configure(state="disabled" if busy else "normal")
 
     @staticmethod
     def _working_text(message: str) -> str:
@@ -760,47 +904,46 @@ class ChatbotDesktopApp(tk.Tk):
             return "正在检索知识库"
         return "正在调用模型"
 
-    def _user_bubble(self, parent: tk.Widget, content: str) -> tk.Label:
-        width = max(280, int(self.chat_canvas.winfo_width() * 0.58))
-        return tk.Label(
+    def _user_bubble(self, parent: tk.Widget, content: str) -> ctk.CTkLabel:
+        width = max(280, int(self.messages_frame.winfo_width() * 0.58))
+        return ctk.CTkLabel(
             parent,
             text=content,
-            bg=USER_BG,
-            fg="#FFFFFF",
-            padx=16,
-            pady=12,
+            fg_color=USER_BG,
+            text_color="#FFFFFF",
+            corner_radius=8,
+            width=width,
+            height=46,
             wraplength=width,
             justify="left",
-            font=(FONT, 10),
-            bd=0,
+            font=FONT_CHAT,
         )
 
-    def _weather_bubble(self, parent: tk.Widget, result: dict[str, Any], fallback: str) -> tk.Frame:
-        frame = tk.Frame(parent, bg=ASSISTANT_BG, highlightthickness=1, highlightbackground=BORDER, padx=16, pady=14)
-        width = max(430, int(self.chat_canvas.winfo_width() * 0.68))
+    def _weather_bubble(self, parent: tk.Widget, result: dict[str, Any], fallback: str) -> ctk.CTkFrame:
+        frame = ctk.CTkFrame(parent, fg_color=ASSISTANT_BG, border_width=1, border_color=BORDER, corner_radius=8)
+        width = max(430, int(self.messages_frame.winfo_width() * 0.68))
         title = self._weather_title(result)
-        tk.Label(frame, text=title, bg=ASSISTANT_BG, fg=TEXT, font=(FONT, 12, "bold"), wraplength=width, justify="left").grid(
+        ctk.CTkLabel(frame, text=title, text_color=TEXT, font=FONT_CHAT_TITLE, wraplength=width, justify="left").grid(
             row=0, column=0, columnspan=5, sticky="w"
         )
         daily_lines = self._weather_daily_rows(result, fallback)
         if daily_lines:
             headers = ("日期", "天气", "温度", "降水", "风速")
             for col, header in enumerate(headers):
-                tk.Label(frame, text=header, bg=ASSISTANT_BG, fg=MUTED, font=(FONT, 9, "bold")).grid(
+                ctk.CTkLabel(frame, text=header, text_color=MUTED, font=FONT_STATUS_BOLD).grid(
                     row=1, column=col, sticky="w", padx=(0, 16), pady=(12, 4)
                 )
             for row_idx, values in enumerate(daily_lines, start=2):
                 for col, value in enumerate(values):
-                    tk.Label(frame, text=value, bg=ASSISTANT_BG, fg=TEXT, font=(FONT, 10)).grid(
+                    ctk.CTkLabel(frame, text=value, text_color=TEXT, font=FONT_CHAT).grid(
                         row=row_idx, column=col, sticky="w", padx=(0, 16), pady=3
                     )
         else:
-            tk.Label(
+            ctk.CTkLabel(
                 frame,
                 text=self._weather_summary(result) or fallback,
-                bg=ASSISTANT_BG,
-                fg=TEXT,
-                font=(FONT, 10),
+                text_color=TEXT,
+                font=FONT_CHAT,
                 wraplength=width,
                 justify="left",
             ).grid(row=1, column=0, columnspan=5, sticky="w", pady=(10, 0))
@@ -823,18 +966,17 @@ class ChatbotDesktopApp(tk.Tk):
             highlightbackground=BORDER,
             padx=16,
             pady=12,
-            font=(FONT, 10),
+            font=FONT_CHAT,
         )
         base_font = tkfont.Font(font=text.cget("font"))
         bold_font = base_font.copy()
         bold_font.configure(weight="bold")
         heading_font = base_font.copy()
-        heading_font.configure(weight="bold", size=11)
-        code_font = tkfont.Font(family="Consolas", size=10)
+        heading_font.configure(weight="bold", size=16)
+        code_font = tkfont.Font(family="Consolas", size=13)
         text.tag_configure("bold", font=bold_font)
         text.tag_configure("heading", font=heading_font, spacing1=4, spacing3=4)
         text.tag_configure("code_block", font=code_font, background="#F1F5F9", foreground="#1F2937", lmargin1=8, lmargin2=8)
-        text.bind("<MouseWheel>", lambda event: (self._on_mousewheel(event), "break")[1])
         self._insert_markdown(text, content)
         text.configure(state="disabled")
         return text
@@ -870,14 +1012,10 @@ class ChatbotDesktopApp(tk.Tk):
         for child in self.messages_frame.winfo_children():
             child.destroy()
 
-    def _sync_message_scrollregion(self, _event: object | None = None) -> None:
-        self.chat_canvas.configure(scrollregion=self.chat_canvas.bbox("all"))
-
-    def _sync_message_width(self, event: tk.Event) -> None:
-        self.chat_canvas.itemconfigure(self.messages_window, width=event.width)
-
-    def _on_mousewheel(self, event: tk.Event) -> None:
-        self.chat_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+    def _scroll_chat_to_bottom(self) -> None:
+        canvas = getattr(self.messages_frame, "_parent_canvas", None)
+        if canvas is not None:
+            self.after_idle(lambda: canvas.yview_moveto(1.0))
 
     def _attach_copy_menu(self, widget: tk.Widget, text: str) -> None:
         children = list(widget.winfo_children())
@@ -895,7 +1033,7 @@ class ChatbotDesktopApp(tk.Tk):
 
     def _show_placeholder(self) -> None:
         self.placeholder_visible = True
-        self.message_input.configure(fg=MUTED)
+        self.message_input.configure(text_color=MUTED)
         self.message_input.delete("1.0", tk.END)
         self.message_input.insert("1.0", self.placeholder)
 
@@ -909,7 +1047,7 @@ class ChatbotDesktopApp(tk.Tk):
 
     def _clear_placeholder(self) -> None:
         self.placeholder_visible = False
-        self.message_input.configure(fg=TEXT)
+        self.message_input.configure(text_color=TEXT)
         self.message_input.delete("1.0", tk.END)
 
     def _input_text(self) -> str:
@@ -936,33 +1074,36 @@ class ChatbotDesktopApp(tk.Tk):
         widget.insert("1.0", text)
         widget.configure(state="disabled")
 
-    def _section(self, parent: tk.Widget, row: int, title: str) -> ttk.Frame:
-        frame = ttk.Frame(parent, style="Section.TFrame", padding=(12, 10, 12, 12))
+    def _section(self, parent: tk.Widget, row: int, title: str) -> ctk.CTkFrame:
+        frame = ctk.CTkFrame(parent, fg_color=CARD_SOFT, corner_radius=8)
         frame.grid(row=row, column=0, sticky="nsew", pady=(0, 10))
+        frame.grid_configure(padx=0)
         frame.columnconfigure(0, weight=1)
-        ttk.Label(frame, text=title, style="SectionTitle.TLabel").grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(frame, text=title, text_color=TEXT, font=FONT_SECTION).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
         return frame
 
-    def _status_row(self, parent: ttk.Frame, row: int, key: str, label: str) -> None:
+    def _status_row(self, parent: ctk.CTkFrame, row: int, key: str, label: str) -> None:
         value = tk.StringVar(value="-")
         self.health_labels[key] = value
-        ttk.Label(parent, text=label, style="StatusName.TLabel").grid(row=row + 1, column=0, sticky="w", pady=(9 if row == 0 else 5, 0))
-        value_label = ttk.Label(parent, textvariable=value, style="Info.TLabel")
-        value_label.grid(row=row + 1, column=1, sticky="e", pady=(9 if row == 0 else 5, 0))
+        ctk.CTkLabel(parent, text=label, text_color=MUTED, font=FONT_STATUS).grid(row=row + 1, column=0, sticky="w", padx=12, pady=(9 if row == 0 else 5, 0))
+        value_label = ctk.CTkLabel(parent, textvariable=value, text_color=PRIMARY_DARK, font=FONT_STATUS_BOLD)
+        value_label.grid(row=row + 1, column=1, sticky="e", padx=12, pady=(9 if row == 0 else 5, 0))
         parent.columnconfigure(1, weight=1)
         self.health_value_labels[key] = value_label
 
-    def _kv_row(self, parent: ttk.Frame, row: int, label: str, value: tk.StringVar, value_style: str = "StatusName.TLabel") -> None:
-        ttk.Label(parent, text=label, style="StatusName.TLabel").grid(row=row, column=0, sticky="w", pady=(9 if row == 1 else 5, 0))
-        ttk.Label(parent, textvariable=value, style=value_style).grid(row=row, column=1, sticky="e", pady=(9 if row == 1 else 5, 0))
+    def _kv_row(self, parent: ctk.CTkFrame, row: int, label: str, value: tk.StringVar, value_style: str = "StatusName.TLabel") -> None:
+        value_color = PRIMARY_DARK if value_style == "Info.TLabel" else MUTED
+        value_weight = "bold" if value_style == "Info.TLabel" else "normal"
+        ctk.CTkLabel(parent, text=label, text_color=MUTED, font=FONT_STATUS).grid(row=row, column=0, sticky="w", padx=12, pady=(9 if row == 1 else 5, 0))
+        ctk.CTkLabel(parent, textvariable=value, text_color=value_color, font=(FONT, 13, value_weight)).grid(row=row, column=1, sticky="e", padx=12, pady=(9 if row == 1 else 5, 0))
         parent.columnconfigure(1, weight=1)
 
     def _set_status(self, key: str, value: str, tone: str) -> None:
         self.health_labels[key].set(value)
-        style = "Ok.TLabel" if tone == "ok" else "Warn.TLabel" if tone == "warn" else "Info.TLabel"
-        self.health_value_labels[key].configure(style=style)
+        color = SUCCESS if tone == "ok" else WARNING if tone == "warn" else PRIMARY_DARK
+        self.health_value_labels[key].configure(text_color=color)
 
-    def _small_text(self, parent: ttk.Frame, height: int) -> tk.Text:
+    def _small_text(self, parent: ctk.CTkFrame, height: int) -> tk.Text:
         return tk.Text(
             parent,
             width=36,
@@ -979,21 +1120,21 @@ class ChatbotDesktopApp(tk.Tk):
             highlightbackground=BORDER,
             padx=10,
             pady=8,
-            font=(FONT, 9),
+            font=FONT_STATUS,
         )
 
     def _add_session_card(self, index: int, item: dict[str, Any]) -> None:
         selected = item["id"] == self.session_id
         bg = PRIMARY_TINT if selected else CARD_SOFT
-        card = tk.Frame(self.sessions_frame, bg=bg, highlightthickness=1, highlightbackground=PRIMARY_SOFT if selected else BORDER, padx=10, pady=9)
+        card = ctk.CTkFrame(self.sessions_frame, fg_color=bg, border_width=1, border_color=PRIMARY_SOFT if selected else BORDER, corner_radius=8)
         card.pack(fill="x", pady=(0, 8))
         card.columnconfigure(0, weight=1)
         title = str(item.get("title") or "未命名会话").replace("\n", " ").strip()[:28]
         updated = str(item.get("updated_at") or "")[:16].replace("T", " ")
-        title_label = tk.Label(card, text=title or "未命名会话", bg=bg, fg=TEXT, font=(FONT, 10, "bold"), anchor="w")
-        title_label.grid(row=0, column=0, sticky="ew")
-        sub_label = tk.Label(card, text=updated or "刚刚", bg=bg, fg=MUTED, font=(FONT, 8), anchor="w")
-        sub_label.grid(row=1, column=0, sticky="ew", pady=(3, 0))
+        title_label = ctk.CTkLabel(card, text=title or "未命名会话", text_color=TEXT, font=FONT_SESSION, anchor="w")
+        title_label.grid(row=0, column=0, sticky="ew", padx=10, pady=(9, 0))
+        sub_label = ctk.CTkLabel(card, text=updated or "刚刚", text_color=MUTED, font=FONT_META, anchor="w")
+        sub_label.grid(row=1, column=0, sticky="ew", padx=10, pady=(3, 9))
 
         def open_card(_event: object | None = None, idx: int = index) -> None:
             self.open_selected_session(idx)
@@ -1002,9 +1143,7 @@ class ChatbotDesktopApp(tk.Tk):
             if item["id"] == self.session_id:
                 return
             next_bg = "#EFF6FF" if active else CARD_SOFT
-            card.configure(bg=next_bg, highlightbackground=BORDER_DARK if active else BORDER)
-            title_label.configure(bg=next_bg)
-            sub_label.configure(bg=next_bg)
+            card.configure(fg_color=next_bg, border_color=BORDER_DARK if active else BORDER)
 
         for widget in (card, title_label, sub_label):
             widget.bind("<Button-1>", open_card)
@@ -1018,9 +1157,7 @@ class ChatbotDesktopApp(tk.Tk):
                 continue
             selected = self.sessions[idx]["id"] == self.session_id
             bg = PRIMARY_TINT if selected else CARD_SOFT
-            card.configure(bg=bg, highlightbackground=PRIMARY_SOFT if selected else BORDER)
-            for child in card.winfo_children():
-                child.configure(bg=bg)
+            card.configure(fg_color=bg, border_color=PRIMARY_SOFT if selected else BORDER)
 
     def _friendly_meta(self, response: ChatResponse) -> str:
         return f"{self._intent_label(response.intent)} · {response.latency_ms} ms"
@@ -1043,7 +1180,7 @@ class ChatbotDesktopApp(tk.Tk):
                 height += 1
             else:
                 height += max(1, (len(line) // width_chars) + 1)
-        return min(max(height, 2), 18)
+        return max(height, 2)
 
     def _weather_title(self, result: dict[str, Any]) -> str:
         location = str(result.get("resolved_location") or result.get("city") or "天气")

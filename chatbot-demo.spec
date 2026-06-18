@@ -3,7 +3,7 @@
 
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 
 ROOT = Path.cwd()
@@ -13,8 +13,9 @@ datas = []
 knowledge_dir = ROOT / "knowledge"
 if knowledge_dir.exists():
     datas.append((str(knowledge_dir), "knowledge"))
+datas += collect_data_files("customtkinter")
 
-hiddenimports = collect_submodules("app")
+hiddenimports = collect_submodules("app") + collect_submodules("customtkinter")
 
 
 a = Analysis(
