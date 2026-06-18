@@ -76,7 +76,8 @@ class ChatbotDesktopApp(ctk.CTk):
         self.session_count = tk.StringVar(value="0 个会话")
         self.llm_api_key = tk.StringVar(value=self.settings.llm_api_key)
         self.show_api_keys = tk.BooleanVar(value=False)
-        self.config_expanded = tk.BooleanVar(value=False)
+        self.settings_window: ctk.CTkToplevel | None = None
+        self.llm_key_entry: ctk.CTkEntry | None = None
         self.chat_has_content = False
         self.sessions: list[dict[str, Any]] = []
         self.session_cards: list[ctk.CTkFrame] = []
@@ -185,6 +186,15 @@ class ChatbotDesktopApp(ctk.CTk):
             pady=4,
             font=FONT_STATUS_BOLD,
         ).grid(row=0, column=1, rowspan=2, sticky="e")
+        ctk.CTkButton(
+            header,
+            text="设置",
+            fg_color=PRIMARY,
+            hover_color=PRIMARY_DARK,
+            font=FONT_BUTTON,
+            width=88,
+            command=self.open_settings_window,
+        ).grid(row=0, column=2, rowspan=2, sticky="e", padx=(10, 0))
 
         body = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
         body.grid(row=1, column=0, sticky="nsew")
@@ -251,10 +261,10 @@ class ChatbotDesktopApp(ctk.CTk):
         toolbar.columnconfigure(0, weight=1)
         ctk.CTkLabel(toolbar, text="当前对话", text_color=TEXT, font=FONT_SECTION).grid(row=0, column=0, sticky="w")
         samples = (
-            ("你好", "你好"),
-            ("当前时间", "现在几点？"),
-            ("天气建议", "今天天气适合跑步吗？"),
-            ("知识库问答", "根据知识库介绍项目"),
+            ("冷笑话", "给我来个冷笑话"),
+            ("程序员笑话", "讲个程序员笑话"),
+            ("线程安全", "什么是线程安全？"),
+            ("学习建议", "给我一个今天的学习建议"),
         )
         for idx, (label, prompt) in enumerate(samples):
             ctk.CTkButton(
@@ -304,7 +314,7 @@ class ChatbotDesktopApp(ctk.CTk):
             font=FONT_INPUT,
         )
         self.message_input.grid(row=0, column=0, sticky="ew")
-        self.placeholder = "输入消息，例如：今天天气适合跑步吗？ / 根据知识库介绍项目"
+        self.placeholder = "输入消息，例如：给我来个冷笑话 / 什么是线程安全？"
         self.placeholder_visible = False
         self._show_placeholder()
         self.message_input.bind("<FocusIn>", self._hide_placeholder)
@@ -385,35 +395,15 @@ class ChatbotDesktopApp(ctk.CTk):
             row=3, column=0, sticky="w", pady=(8, 0)
         )
 
-        config = self._section(content, 5, "配置区域")
-        self.config_toggle = ctk.CTkButton(
+        config = self._section(content, 5, "API 配置")
+        ctk.CTkLabel(
             config,
-            text="显示 API Key 配置",
-            fg_color=CARD_SOFT,
-            text_color=TEXT,
-            hover_color=PRIMARY_TINT,
-            font=FONT_BUTTON,
-            command=self.toggle_config_panel,
-        )
-        self.config_toggle.grid(row=1, column=0, sticky="ew", pady=(8, 0))
-        self.config_body = ctk.CTkFrame(config, fg_color=CARD_SOFT, corner_radius=8)
-        self.config_body.columnconfigure(0, weight=1)
-        ctk.CTkLabel(self.config_body, text="LLM API Key", text_color=MUTED, font=FONT_STATUS).grid(row=0, column=0, sticky="w", pady=(10, 3), padx=10)
-        self.llm_key_entry = ctk.CTkEntry(self.config_body, textvariable=self.llm_api_key, show="*", fg_color="#FFFFFF", border_color=BORDER_DARK, font=FONT_INPUT)
-        self.llm_key_entry.grid(row=1, column=0, sticky="ew")
-        self.llm_key_entry.grid_configure(padx=10)
-        ctk.CTkCheckBox(
-            self.config_body,
-            text="显示密钥",
-            variable=self.show_api_keys,
-            fg_color=PRIMARY,
-            hover_color=PRIMARY_DARK,
+            text="请点击主界面右上角“设置”按钮配置 API Key。",
             text_color=MUTED_DARK,
-            font=FONT_BUTTON,
-            command=self.toggle_api_key_visibility,
-        ).grid(row=2, column=0, sticky="w", pady=(8, 0), padx=10)
-        ctk.CTkButton(self.config_body, text="保存配置", fg_color=PRIMARY, hover_color=PRIMARY_DARK, font=FONT_BUTTON, command=self.save_api_config).grid(row=3, column=0, sticky="ew", pady=(10, 6), padx=10)
-        ctk.CTkButton(self.config_body, text="重新加载配置", fg_color=CARD_SOFT, text_color=TEXT, hover_color=PRIMARY_TINT, font=FONT_BUTTON, command=self.reload_api_config).grid(row=4, column=0, sticky="ew", padx=10, pady=(0, 10))
+            font=FONT_STATUS,
+            wraplength=270,
+            justify="left",
+        ).grid(row=1, column=0, sticky="w", padx=12, pady=(8, 10))
 
     def refresh_status(self) -> None:
         model = self.settings.llm_model if self.settings.llm_api_key else "offline-demo"
@@ -665,7 +655,7 @@ class ChatbotDesktopApp(ctk.CTk):
             (
                 f"本次请求超过 {DESKTOP_REQUEST_TIMEOUT_SECONDS} 秒没有返回，客户端已停止等待。\n\n"
                 "这通常是模型 API 网络超时、服务端无响应或密钥/代理配置异常导致的。"
-                "你可以稍后重试，或先用“当前时间”“天气建议”确认工具链是否正常。"
+                "你可以稍后重试，或先发送一个轻量问题确认对话链路是否正常。"
             ),
             "assistant",
         )
@@ -681,25 +671,96 @@ class ChatbotDesktopApp(ctk.CTk):
         except tk.TclError:
             logging.exception("desktop input focus restore failed")
 
-    def toggle_config_panel(self) -> None:
-        expanded = not self.config_expanded.get()
-        self.config_expanded.set(expanded)
-        if expanded:
-            self.config_body.grid(row=2, column=0, sticky="ew")
-            self.config_toggle.configure(text="隐藏 API Key 配置")
-        else:
-            self.config_body.grid_remove()
-            self.config_toggle.configure(text="显示 API Key 配置")
+    def open_settings_window(self) -> None:
+        if self.settings_window is not None and self.settings_window.winfo_exists():
+            self.settings_window.focus()
+            self.settings_window.lift()
+            return
+
+        self.show_api_keys.set(False)
+        self.llm_api_key.set(self.settings.llm_api_key)
+
+        window = ctk.CTkToplevel(self)
+        self.settings_window = window
+        window.title("API 配置")
+        window.geometry("560x360")
+        window.minsize(520, 340)
+        window.configure(fg_color=BG)
+        window.transient(self)
+        window.protocol("WM_DELETE_WINDOW", self._close_settings_window)
+        window.columnconfigure(0, weight=1)
+
+        content = ctk.CTkFrame(window, fg_color=CARD, border_width=1, border_color=BORDER, corner_radius=8)
+        content.grid(row=0, column=0, sticky="nsew", padx=18, pady=18)
+        content.columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(content, text="API 配置", text_color=TEXT, font=FONT_TITLE).grid(row=0, column=0, sticky="w", padx=16, pady=(16, 4))
+        ctk.CTkLabel(
+            content,
+            text=f"配置文件：{runtime_path('.env')}",
+            text_color=MUTED_DARK,
+            font=FONT_STATUS,
+            wraplength=500,
+            justify="left",
+        ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 12))
+
+        ctk.CTkLabel(content, text="LLM API Key", text_color=MUTED, font=FONT_STATUS).grid(row=2, column=0, sticky="w", padx=16)
+        self.llm_key_entry = ctk.CTkEntry(
+            content,
+            textvariable=self.llm_api_key,
+            show="*",
+            fg_color="#FFFFFF",
+            border_color=BORDER_DARK,
+            font=FONT_INPUT,
+        )
+        self.llm_key_entry.grid(row=3, column=0, sticky="ew", padx=16, pady=(4, 8))
+
+        ctk.CTkCheckBox(
+            content,
+            text="显示密钥",
+            variable=self.show_api_keys,
+            fg_color=PRIMARY,
+            hover_color=PRIMARY_DARK,
+            text_color=MUTED_DARK,
+            font=FONT_BUTTON,
+            command=self.toggle_api_key_visibility,
+        ).grid(row=4, column=0, sticky="w", padx=16, pady=(0, 12))
+
+        ctk.CTkLabel(
+            content,
+            text="天气功能使用 Open-Meteo，无需 API Key。",
+            text_color=MUTED_DARK,
+            font=FONT_STATUS,
+            wraplength=500,
+            justify="left",
+        ).grid(row=5, column=0, sticky="w", padx=16, pady=(0, 14))
+
+        actions = ctk.CTkFrame(content, fg_color=CARD, corner_radius=0)
+        actions.grid(row=6, column=0, sticky="ew", padx=16, pady=(0, 16))
+        actions.columnconfigure(0, weight=1)
+        actions.columnconfigure(1, weight=1)
+        ctk.CTkButton(actions, text="保存配置", fg_color=PRIMARY, hover_color=PRIMARY_DARK, font=FONT_BUTTON, command=self.save_api_config).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ctk.CTkButton(actions, text="重新加载配置", fg_color=CARD_SOFT, text_color=TEXT, hover_color=PRIMARY_TINT, font=FONT_BUTTON, command=self.reload_api_config).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+
+        window.after(100, self.llm_key_entry.focus)
+
+    def _close_settings_window(self) -> None:
+        if self.settings_window is not None and self.settings_window.winfo_exists():
+            self.settings_window.destroy()
+        self.settings_window = None
+        self.llm_key_entry = None
 
     def toggle_api_key_visibility(self) -> None:
         mask = "" if self.show_api_keys.get() else "*"
-        self.llm_key_entry.configure(show=mask)
+        if self.llm_key_entry is not None and self.llm_key_entry.winfo_exists():
+            self.llm_key_entry.configure(show=mask)
 
     def save_api_config(self) -> None:
         try:
             self._write_env_values({"LLM_API_KEY": self.llm_api_key.get().strip()})
             self._reload_settings_from_disk()
             self.status.set("配置已保存")
+            messagebox.showinfo("API 配置", "配置已保存。", parent=self.settings_window or self)
         except Exception as exc:
             self._show_error(exc)
 
@@ -707,6 +768,8 @@ class ChatbotDesktopApp(ctk.CTk):
         try:
             self._reload_settings_from_disk()
             self.llm_api_key.set(self.settings.llm_api_key)
+            self.show_api_keys.set(False)
+            self.toggle_api_key_visibility()
             self.status.set("配置已重新加载")
         except Exception as exc:
             self._show_error(exc)
