@@ -154,6 +154,19 @@ def list_messages(session_id: str) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def delete_session(session_id: str) -> bool:
+    init_db()
+    with connect() as conn:
+        row = conn.execute("SELECT id FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        if not row:
+            return False
+        conn.execute("DELETE FROM keyword_hits WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM model_outputs WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        return True
+
+
 def save_keyword_hit(session_id: str, message_id: int, keyword: str, reply: str) -> None:
     with connect() as conn:
         conn.execute(

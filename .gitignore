@@ -10,3 +10,5 @@ data/uvicorn*.txt
 frontend/node_modules/
 frontend/dist/
 frontend/.env
+build/
+dist/
